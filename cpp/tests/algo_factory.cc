@@ -121,7 +121,7 @@ TEST_CASE("fb_factory") {
   const Vector<t_complex> residuals = measurements_transform->adjoint() *
                                       (uv_data.vis - ((*measurements_transform) * diagnostic.x));
   const Image<t_complex> residual_image = Image<t_complex>::Map(residuals.data(), imsizey, imsizex);
-  pfitsio::write2d(residual_image.real(), expected_residual_path);
+  // pfitsio::write2d(residual_image.real(), expected_residual_path);
   CAPTURE(Vector<t_complex>::Map(residual.data(), residual.size()).real().head(10));
   CAPTURE(Vector<t_complex>::Map(residuals.data(), residuals.size()).real().head(10));
   CHECK(residual_image.real().isApprox(residual.real(), 1e-6));
@@ -160,7 +160,7 @@ TEST_CASE("joint_map_factory") {
       factory::distributed_wavelet_operator::serial, sara, imsizey, imsizex);
   t_real const sigma = 0.02378738741225;  // see test_parameters file
   t_real const beta = sigma * sigma;
-  t_real const gamma = 1;
+  t_real const gamma = 0;
   auto const fb = factory::fb_factory<sopt::algorithm::ImagingForwardBackward<t_complex>>(
       factory::algo_distribution::serial, measurements_transform, wavelets, uv_data, sigma, beta,
       gamma, imsizey, imsizex, sara.size(), 1000, true, true, false, 1e-3, 1e-3, 50);
@@ -168,26 +168,31 @@ TEST_CASE("joint_map_factory") {
     auto val = sopt::l1_norm(wavelets->adjoint() * x);
     return val;
   };
+  const t_real beta_param =
+      1. /
+      (wavelets->adjoint() * (measurements_transform->adjoint() * uv_data.vis)).cwiseAbs().mean();
   auto const joint_map =
       sopt::algorithm::JointMAP<sopt::algorithm::ImagingForwardBackward<t_complex>>(
-          fb, l1_norm, imsizex * imsizey * sara.size())
+          fb, l1_norm, imsizex * imsizey)
           .relative_variation(1e-3)
           .objective_variation(1e-3)
+          .k(sara.size() * imsizey * imsizex)
           .beta(1.)
           .alpha(1.);
   auto const diagnostic = joint_map();
   //  CHECK(diagnostic.reg_niters == 13);
   const Image<t_complex> image = Image<t_complex>::Map(diagnostic.x.data(), imsizey, imsizex);
-  //  CAPTURE(Vector<t_complex>::Map(solution.data(), solution.size()).real().head(10));
-  //  CAPTURE(Vector<t_complex>::Map(image.data(), image.size()).real().head(10));
-  //  CAPTURE(Vector<t_complex>::Map((image / solution).eval().data(),
-  //  image.size()).real().head(10));
-  // CHECK(image.isApprox(solution, 1e-6));
+  // pfitsio::write2d(image.real(), expected_solution_path);
+  CAPTURE(Vector<t_complex>::Map(solution.data(), solution.size()).real().head(10));
+  CAPTURE(Vector<t_complex>::Map(image.data(), image.size()).real().head(10));
+  CAPTURE(Vector<t_complex>::Map((image / solution).eval().data(), image.size()).real().head(10));
+  CHECK(image.isApprox(solution, 1e-6));
 
   const Vector<t_complex> residuals = measurements_transform->adjoint() *
                                       (uv_data.vis - ((*measurements_transform) * diagnostic.x));
   const Image<t_complex> residual_image = Image<t_complex>::Map(residuals.data(), imsizey, imsizex);
-  //  CAPTURE(Vector<t_complex>::Map(residual.data(), residual.size()).real().head(10));
-  //  CAPTURE(Vector<t_complex>::Map(residuals.data(), residuals.size()).real().head(10));
-  // CHECK(residual_image.real().isApprox(residual.real(), 1e-6));
+  // pfitsio::write2d(residual_image.real(), expected_residual_path);
+  CAPTURE(Vector<t_complex>::Map(residual.data(), residual.size()).real().head(10));
+  CAPTURE(Vector<t_complex>::Map(residuals.data(), residuals.size()).real().head(10));
+  CHECK(residual_image.real().isApprox(residual.real(), 1e-6));
 }
