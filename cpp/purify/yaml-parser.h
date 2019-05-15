@@ -137,8 +137,6 @@ class YamlParser {
   YAML_MACRO(t_uint, jmap_iters, 100)
   YAML_MACRO(t_real, jmap_relVarianceConvergence, 0)
   YAML_MACRO(t_real, jmap_objVarianceConvergence, 0)
-  YAML_MACRO(t_real, jmap_alpha, 1)
-  YAML_MACRO(t_real, jmap_beta, 1)
 
 #undef YAML_MACRO
  private:

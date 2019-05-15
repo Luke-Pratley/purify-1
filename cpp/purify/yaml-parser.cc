@@ -222,17 +222,11 @@ void YamlParser::parseAndSetAlgorithmOptions(const YAML::Node& algorithmOptionsN
         get<t_real>(algorithmOptionsNode, {"fb", "regularisation_parameter"});
     this->dualFBVarianceConvergence_ =
         get<t_real>(algorithmOptionsNode, {"fb", "dualFBVarianceConvergence"});
-    if (this->algorithm_ == "fb_joint_map") {
-      this->jmap_iters_ =
-          get<t_uint>(algorithmOptionsNode, {"fb", "joint_map_estimation", "iters"});
-      this->jmap_relVarianceConvergence_ = get<t_real>(
-          algorithmOptionsNode, {"fb", "joint_map_estimation", "relVarianceConvergence"});
-      this->jmap_objVarianceConvergence_ = get<t_real>(
-          algorithmOptionsNode, {"fb", "joint_map_estimation", "objVarianceConvergence"});
-      this->jmap_alpha_ =
-          get<t_real>(algorithmOptionsNode, {"fb", "joint_map_estimation", "alpha"});
-      this->jmap_beta_ = get<t_real>(algorithmOptionsNode, {"fb", "joint_map_estimation", "beta"});
-    }
+    this->jmap_iters_ = get<t_uint>(algorithmOptionsNode, {"fb", "joint_map_estimation", "iters"});
+    this->jmap_relVarianceConvergence_ =
+        get<t_real>(algorithmOptionsNode, {"fb", "joint_map_estimation", "relVarianceConvergence"});
+    this->jmap_objVarianceConvergence_ =
+        get<t_real>(algorithmOptionsNode, {"fb", "joint_map_estimation", "objVarianceConvergence"});
   } else if (this->algorithm_ == "primaldual") {
     this->epsilonConvergenceScaling_ =
         get<t_int>(algorithmOptionsNode, {"primaldual", "epsilonConvergenceScaling"});
