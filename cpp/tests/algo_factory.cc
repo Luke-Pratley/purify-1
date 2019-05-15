@@ -240,7 +240,8 @@ TEST_CASE("joint_map_factory") {
           .beta(beta_param)
           .alpha(1.);
   auto const diagnostic = joint_map();
-  //  CHECK(diagnostic.reg_niters == 13);
+  CHECK(diagnostic.reg_niters == 5);
+  CHECK(diagnostic.niters == 101);
   const Image<t_complex> image = Image<t_complex>::Map(diagnostic.x.data(), imsizey, imsizex);
   //pfitsio::write2d(image.real(), expected_solution_path);
   CAPTURE(Vector<t_complex>::Map(solution.data(), solution.size()).real().head(10));
