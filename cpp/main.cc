@@ -513,7 +513,7 @@ int main(int argc, const char **argv) {
     purified_header.hasconverged = diagnostic.good;
     purified_header.niters = diagnostic.niters;
   }
-  if (params.algorithm() == "fb") {
+  if (params.algorithm() == "fb" and params.jmap_iters() == 0) {
     // Apply algorithm
     auto const diagnostic = (*fb)(std::make_tuple(estimate_image.eval(), estimate_res.eval()));
 
@@ -527,6 +527,47 @@ int main(int argc, const char **argv) {
     purified_header.hasconverged = diagnostic.good;
     purified_header.niters = diagnostic.niters;
   }
+  if (params.algorithm() == "fb" and params.jmap_iters() > 0) {
+    // Apply algorithm
+    auto const l1_norm = [wavelets_transform](const Vector<t_complex> &x) {
+      return sopt::l1_norm(wavelets_transform->adjoint() * x);
+    };
+#ifdef PURIFY_MPI
+    auto const world = sopt::mpi::Communicator::World();
+#endif
+    const t_real beta_param =
+        (
+#ifdef PURIFY_MPI
+            (using_mpi) ? world.all_reduce(utilities::step_size(uv_data.vis, measurements_transform,
+                                                                wavelets_transform, sara_size),
+                                           MPI_MAX)
+                        :
+#endif
+                        (wavelets_transform->adjoint() *
+                         (measurements_transform->adjoint() * uv_data.vis).eval())
+                            .cwiseAbs()
+                            .maxCoeff()) /
+        beam_units;
+    auto const joint_map =
+        sopt::algorithm::JointMAP<sopt::algorithm::ImagingForwardBackward<t_complex>>(
+            fb, l1_norm, params.height() * params.width() * sara_size)
+            .itermax(params.jmap_iters())
+            .relative_variation(params.jmap_relVarianceConvergence())
+            .objective_variation(params.jmap_objVarianceConvergence())
+            .beta(beta_param);
+    auto const diagnostic = joint_map(std::make_tuple(estimate_image.eval(), estimate_res.eval()));
+
+    // Save the rest of the output
+    // the clean image
+    image = Image<t_complex>::Map(diagnostic.x.data(), params.height(), params.width()).real();
+    const Vector<t_complex> residuals =
+        measurements_transform->adjoint() * (diagnostic.residual / beam_units);
+    residual_image =
+        Image<t_complex>::Map(residuals.data(), params.height(), params.width()).real();
+    purified_header.hasconverged = diagnostic.good;
+    purified_header.niters = diagnostic.niters;
+  }
+
   if (params.algorithm() == "primaldual") {
     // Apply algorithm
     auto const diagnostic =
