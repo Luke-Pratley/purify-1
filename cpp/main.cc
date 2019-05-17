@@ -538,8 +538,9 @@ int main(int argc, const char **argv) {
     const t_real beta_param =
         (
 #ifdef PURIFY_MPI
-            (using_mpi) ? world.all_reduce(utilities::step_size(uv_data.vis, measurements_transform,
-                                                                wavelets_transform, sara_size),
+            (using_mpi) ? world.all_reduce(utilities::step_size<Vector<t_complex>>(
+                                               uv_data.vis, measurements_transform,
+                                               wavelets_transform, sara_size),
                                            MPI_MAX)
                         :
 #endif
