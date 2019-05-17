@@ -549,7 +549,8 @@ int main(int argc, const char **argv) {
                                  (wavelets_transform->adjoint() *
                                   (measurements_transform->adjoint() * uv_data.vis).eval())
                                      .cwiseAbs()
-                                     .maxCoeff());
+                                     .maxCoeff()) /
+                 beam_units;
     auto const joint_map =
         sopt::algorithm::JointMAP<sopt::algorithm::ImagingForwardBackward<t_complex>>(
             fb, l1_norm, params.height() * params.width() * sara_size)
