@@ -537,7 +537,19 @@ int main(int argc, const char **argv) {
 #endif
     const t_real beta_param = 1. / 3;
     const t_real alpha_param =
-        1. + 0.5 * beta_param * (l1_norm(measurements_transform->adjoint() * uv_data.vis));
+        1. + 0.5 * beta_param *
+                 (
+#ifdef PURIFY_MPI
+                     (using_mpi) ? world.all_reduce(utilities::step_size<Vector<t_complex>>(
+                                                        uv_data.vis, measurements_transform,
+                                                        wavelets_transform, sara_size),
+                                                    MPI_MAX)
+                                 :
+#endif
+                                 (wavelets_transform->adjoint() *
+                                  (measurements_transform->adjoint() * uv_data.vis).eval())
+                                     .cwiseAbs()
+                                     .maxCoeff());
     auto const joint_map =
         sopt::algorithm::JointMAP<sopt::algorithm::ImagingForwardBackward<t_complex>>(
             fb, l1_norm, params.height() * params.width() * sara_size)
