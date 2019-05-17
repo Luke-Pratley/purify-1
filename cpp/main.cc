@@ -537,7 +537,7 @@ int main(int argc, const char **argv) {
 #endif
     const t_real beta_param = 1. / 3;
     const t_real alpha_param =
-        0.5 * beta_param * (measurements_transform->adjoint() * uv_data.vis).norm() + 1;
+        1. + 0.5 * beta_param * (l1_norm(measurements_transform->adjoint() * uv_data.vis));
     auto const joint_map =
         sopt::algorithm::JointMAP<sopt::algorithm::ImagingForwardBackward<t_complex>>(
             fb, l1_norm, params.height() * params.width() * sara_size)
