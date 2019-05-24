@@ -529,12 +529,26 @@ int main(int argc, const char **argv) {
   }
   if (params.algorithm() == "fb" and params.jmap_iters() > 0) {
     // Apply algorithm
-    auto const l1_norm = [wavelets_transform](const Vector<t_complex> &x) {
-      return sopt::l1_norm(wavelets_transform->adjoint() * x);
-    };
 #ifdef PURIFY_MPI
     auto const world = sopt::mpi::Communicator::World();
 #endif
+    auto const l1_norm = [wavelets_transform
+#ifdef PURIFY_MPI
+                          ,
+                          world
+#endif
+
+    ](const Vector<t_complex> &x) {
+      return
+#ifdef PURIFY_MPI
+          world.all_sum_all(
+#endif
+              sopt::l1_norm(wavelets_transform->adjoint() * x)
+#ifdef PURIFY_MPI
+          )
+#endif
+              ;
+    };
     const t_real beta_param = 1. / 3;
     const t_real alpha_param =
         1. + 0.5 * beta_param *
@@ -549,8 +563,8 @@ int main(int argc, const char **argv) {
                                  (wavelets_transform->adjoint() *
                                   (measurements_transform->adjoint() * uv_data.vis).eval())
                                      .cwiseAbs()
-                                     .maxCoeff()) /
-                 beam_units;
+                                     .maxCoeff()) *
+                 params.height() * params.width() * sara_size;
     auto const joint_map =
         sopt::algorithm::JointMAP<sopt::algorithm::ImagingForwardBackward<t_complex>>(
             fb, l1_norm, params.height() * params.width() * sara_size)
