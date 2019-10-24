@@ -10,11 +10,11 @@
 namespace purify {
 namespace spherical_resample {
 //! calculate l directional cosine for a given pointing given angles
-t_real calculate_l(const t_real theta, const t_real phi);
+t_real calculate_l(const t_real phi, const t_real theta);
 //! calculate m directional cosine for a given pointing given angles
-t_real calculate_m(const t_real theta, const t_real phi);
+t_real calculate_m(const t_real phi, const t_real theta);
 //! calculate n directional cosine for a given pointing given angles
-t_real calculate_n(const t_real phi);
+t_real calculate_n(const t_real theta);
 //! calculate the rotated l from euler angles in zyz and starting coordinates (l, m, n)
 template <class T>
 T calculate_rotated_l(const T &l, const T &m, const T &n, const t_real alpha, const t_real beta,
@@ -43,13 +43,13 @@ T calculate_rotated_n(const T &l, const T &m, const T &n, const t_real alpha, co
          n * std::cos(beta);
 }
 //! calculate the l in a rotated frame from euler angles in zyz
-t_real calculate_l(const t_real theta, const t_real phi, const t_real alpha, const t_real beta,
+t_real calculate_l(const t_real phi, const t_real theta, const t_real alpha, const t_real beta,
                    const t_real gamma);
 //! calculate the m in a rotated frame from euler angles in zyz
-t_real calculate_m(const t_real theta, const t_real phi, const t_real alpha, const t_real beta,
+t_real calculate_m(const t_real phi, const t_real theta, const t_real alpha, const t_real beta,
                    const t_real gamma);
 //! calculate the n in a rotated frame from euler angles in zyz
-t_real calculate_n(const t_real theta, const t_real phi, const t_real alpha, const t_real beta,
+t_real calculate_n(const t_real phi, const t_real theta, const t_real alpha, const t_real beta,
                    const t_real gamma);
 
 //! generate indicies that overlap with imaging field of view for resampling
@@ -70,16 +70,16 @@ Sparse<t_complex> init_resample_matrix_2d(
 //! generate the l and m coordinates in pixels and their indicies for resampling
 template <class T>
 std::tuple<Vector<t_real>, Vector<t_real>, std::vector<t_int>> calculate_compressed_lm(
-    const t_int number_of_samples, const t_real theta_0, const t_real phi_0, const T &theta,
-    const T &phi, const t_int imsizey_upsampled, const t_int imsizex_upsampled,
+    const t_int number_of_samples, const t_real phi_0, const t_real theta_0, const T &phi,
+    const T &theta, const t_int imsizey_upsampled, const t_int imsizex_upsampled,
     const t_real dl_upsampled, const t_real dm_upsampled) {
   Vector<t_real> l = Vector<t_real>::Zero(number_of_samples);
   Vector<t_real> m = Vector<t_real>::Zero(number_of_samples);
   Vector<t_real> n = Vector<t_real>::Zero(number_of_samples);
   for (t_int k = 0; k < number_of_samples; k++) {
-    l(k) = calculate_l(theta(k), phi(k), 0., phi_0, theta_0);
-    m(k) = calculate_m(theta(k), phi(k), 0., phi_0, theta_0);
-    n(k) = calculate_n(theta(k), phi(k), 0., phi_0, theta_0);
+    l(k) = calculate_l(phi(k), theta(k), 0., theta_0, phi_0);
+    m(k) = calculate_m(phi(k), theta(k), 0., theta_0, phi_0);
+    n(k) = calculate_n(phi(k), theta(k), 0., theta_0, phi_0);
   }
   const std::vector<t_int> indicies = generate_indicies(l, m, n, imsizex_upsampled * dl_upsampled,
                                                         imsizey_upsampled * dm_upsampled);
@@ -147,8 +147,8 @@ std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_resample_o
 //! return operator that will resample between the sphere and the plane with masking
 template <class K, class T>
 std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_mask_and_resample_operator_2d(
-    const t_int number_of_samples, const t_real theta_0, const t_real phi_0, const T &theta,
-    const T &phi, const t_int imsizey, const t_int imsizex,
+    const t_int number_of_samples, const t_real phi_0, const t_real theta_0, const T &phi,
+    const T &theta, const t_int imsizey, const t_int imsizex,
     const t_real oversample_ratio_image_domain, const t_real dl, const t_real dm,
     const std::function<t_real(t_real)> &kernell, const std::function<t_real(t_real)> &kernelm,
     const t_int Jl, const t_int Jm, const std::function<t_complex(t_real, t_real)> &dde,
@@ -166,7 +166,7 @@ std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_mask_and_r
   const t_real dm_upsampled = dm / oversample_ratio_image_domain;
 
   const auto lm_with_mask =
-      calculate_compressed_lm<T>(number_of_samples, theta_0, phi_0, theta, phi, imsizey_upsampled,
+      calculate_compressed_lm<T>(number_of_samples, phi_0, theta_0, phi, theta, imsizey_upsampled,
                                  imsizex_upsampled, dl_upsampled, dm_upsampled);
   const Vector<t_real> &l_compressed = std::get<0>(lm_with_mask);
   const Vector<t_real> &m_compressed = std::get<1>(lm_with_mask);
@@ -362,8 +362,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
 //! w-stacking)
 template <class T, class K>
 std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degrid_operator(
-    const t_int number_of_samples, const t_real theta_0, const t_real phi_0, const K &theta,
-    const K &phi, const Vector<t_real> &u, const Vector<t_real> &v, const Vector<t_real> &w,
+    const t_int number_of_samples, const t_real phi_0, const t_real theta_0, const K &phi,
+    const K &theta, const Vector<t_real> &u, const Vector<t_real> &v, const Vector<t_real> &w,
     const Vector<t_complex> &weights, const t_real oversample_ratio = 2,
     const t_real oversample_ratio_image_domain = 2,
     const kernels::kernel kernel = kernels::kernel::kb, const t_uint Ju = 4, const t_uint Jv = 4,
@@ -424,7 +424,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   PURIFY_LOW_LOG("Constructing Spherical Resampling Operator: P");
   sopt::OperatorFunction<T> directP, indirectP;
   std::tie(directP, indirectP) = init_mask_and_resample_operator_2d<T, K>(
-      number_of_samples, theta_0, phi_0, theta, phi, imsizey, imsizex,
+      number_of_samples, phi_0, theta_0, phi, theta, imsizey, imsizex,
       oversample_ratio_image_domain, dl, dm, kernell, kernelm, Jl, Jm, dde, coordinate_scaling);
   sopt::OperatorFunction<T> directZFZ, indirectZFZ;
   std::tie(directZFZ, indirectZFZ) =
@@ -458,8 +458,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
 //! w-stacking)
 template <class T, class K>
 std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degrid_wproj_operator(
-    const t_int number_of_samples, const t_real theta_0, const t_real phi_0, const K &theta,
-    const K &phi, const Vector<t_real> &u, const Vector<t_real> &v, const Vector<t_real> &w,
+    const t_int number_of_samples, const t_real phi_0, const t_real theta_0, const K &phi,
+    const K &theta, const Vector<t_real> &u, const Vector<t_real> &v, const Vector<t_real> &w,
     const Vector<t_complex> &weights, const t_real oversample_ratio = 2,
     const t_real oversample_ratio_image_domain = 2,
     const kernels::kernel kernel = kernels::kernel::kb, const t_uint Ju = 4, const t_uint Jw = 100,
@@ -528,7 +528,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   PURIFY_LOW_LOG("Constructing Spherical Resampling Operator: P");
   sopt::OperatorFunction<T> directP, indirectP;
   std::tie(directP, indirectP) = init_mask_and_resample_operator_2d<T, K>(
-      number_of_samples, theta_0, phi_0, theta, phi, imsizey, imsizex,
+      number_of_samples, phi_0, theta_0, phi, theta, imsizey, imsizex,
       oversample_ratio_image_domain, dl, dm, kernell, kernelm, Jl, Jm, dde, coordinate_scaling);
 
   sopt::OperatorFunction<T> directZFZ, indirectZFZ;
@@ -553,8 +553,8 @@ namespace measurement_operator {
 //! only w-stacking)
 template <class T, class K>
 std::shared_ptr<sopt::LinearTransform<T>> planar_degrid_operator(
-    const t_int number_of_samples, const t_real theta_0, const t_real phi_0, const K &theta,
-    const K &phi, const utilities::vis_params &uv_data, const t_real oversample_ratio = 2,
+    const t_int number_of_samples, const t_real phi_0, const t_real theta_0, const K &phi,
+    const K &theta, const utilities::vis_params &uv_data, const t_real oversample_ratio = 2,
     const t_real oversample_ratio_image_domain = 2,
     const kernels::kernel kernel = kernels::kernel::kb, const t_uint Ju = 4, const t_uint Jv = 4,
     const t_uint Jl = 4, const t_uint Jm = 4,
@@ -564,7 +564,7 @@ std::shared_ptr<sopt::LinearTransform<T>> planar_degrid_operator(
   if (uv_data.units != utilities::vis_units::lambda)
     throw std::runtime_error("Units for spherical imaging must be in lambda");
   const auto m_op = base_plane_degrid_operator<T, K>(
-      number_of_samples, theta_0, phi_0, theta, phi, uv_data.u, uv_data.v, uv_data.w,
+      number_of_samples, phi_0, theta_0, phi, theta, uv_data.u, uv_data.v, uv_data.w,
       uv_data.weights, oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jv, Jl, Jm,
       ft_plan, uvw_stacking, L, M, 1, beam_l, beam_m);
 
@@ -578,8 +578,8 @@ std::shared_ptr<sopt::LinearTransform<T>> planar_degrid_operator(
 //! w-stacking)
 template <class T, class K>
 std::shared_ptr<sopt::LinearTransform<T>> nonplanar_degrid_wproj_operator(
-    const t_int number_of_samples, const t_real theta_0, const t_real phi_0, const K &theta,
-    const K &phi, const utilities::vis_params &uv_data, const t_real oversample_ratio = 2,
+    const t_int number_of_samples, const t_real phi_0, const t_real theta_0, const K &phi,
+    const K &theta, const utilities::vis_params &uv_data, const t_real oversample_ratio = 2,
     const t_real oversample_ratio_image_domain = 2,
     const kernels::kernel kernel = kernels::kernel::kb, const t_uint Ju = 4, const t_uint Jw = 100,
     const t_uint Jl = 4, const t_uint Jm = 4,
@@ -589,7 +589,7 @@ std::shared_ptr<sopt::LinearTransform<T>> nonplanar_degrid_wproj_operator(
   if (uv_data.units != utilities::vis_units::lambda)
     throw std::runtime_error("Units for spherical imaging must be in lambda");
   const auto m_op = base_plane_degrid_wproj_operator<T, K>(
-      number_of_samples, theta_0, phi_0, theta, phi, uv_data.u, uv_data.v, uv_data.w,
+      number_of_samples, phi_0, theta_0, phi, theta, uv_data.u, uv_data.v, uv_data.w,
       uv_data.weights, oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jw, Jl, Jm,
       ft_plan, uvw_stacking, L, absolute_error, relative_error, 1, beam_l, beam_m);
 
@@ -603,8 +603,8 @@ std::shared_ptr<sopt::LinearTransform<T>> nonplanar_degrid_wproj_operator(
 //! Returns linear transform that is the weighted degridding operator with mpi all sum all
 template <class T, class K>
 std::shared_ptr<sopt::LinearTransform<T>> nonplanar_degrid_wproj_operator(
-    const sopt::mpi::Communicator &comm, const t_int number_of_samples, const t_real theta_0,
-    const t_real phi_0, const K &theta, const K &phi, const utilities::vis_params &uv_data,
+    const sopt::mpi::Communicator &comm, const t_int number_of_samples, const t_real phi_0,
+    const t_real theta_0, const K &phi, const K &theta, const utilities::vis_params &uv_data,
     const t_real oversample_ratio = 2, const t_real oversample_ratio_image_domain = 2,
     const kernels::kernel kernel = kernels::kernel::kb, const t_uint Ju = 4, const t_uint Jw = 100,
     const t_uint Jl = 4, const t_uint Jm = 4,
@@ -614,7 +614,7 @@ std::shared_ptr<sopt::LinearTransform<T>> nonplanar_degrid_wproj_operator(
   if (uv_data.units != utilities::vis_units::lambda)
     throw std::runtime_error("Units for spherical imaging must be in lambda");
   const auto m_op = base_plane_degrid_wproj_operator<T, K>(
-      number_of_samples, theta_0, phi_0, theta, phi, uv_data.u, uv_data.v, uv_data.w,
+      number_of_samples, phi_0, theta_0, phi, theta, uv_data.u, uv_data.v, uv_data.w,
       uv_data.weights, oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jw, Jl, Jm,
       ft_plan, uvw_stacking, L, absolute_error, relative_error);
   const auto allsumall = purify::operators::init_all_sum_all<T>(comm);
@@ -631,8 +631,8 @@ std::shared_ptr<sopt::LinearTransform<T>> nonplanar_degrid_wproj_operator(
 //! planar array)
 template <class T, class K>
 std::shared_ptr<sopt::LinearTransform<T>> planar_degrid_operator(
-    const sopt::mpi::Communicator &comm, const t_int number_of_samples, const t_real theta_0,
-    const t_real phi_0, const K &theta, const K &phi, const utilities::vis_params &uv_data,
+    const sopt::mpi::Communicator &comm, const t_int number_of_samples, const t_real phi_0,
+    const t_real theta_0, const K &phi, const K &theta, const utilities::vis_params &uv_data,
     const t_real oversample_ratio = 2, const t_real oversample_ratio_image_domain = 2,
     const kernels::kernel kernel = kernels::kernel::kb, const t_uint Ju = 4, const t_uint Jv = 4,
     const t_uint Jl = 4, const t_uint Jm = 4,
@@ -642,7 +642,7 @@ std::shared_ptr<sopt::LinearTransform<T>> planar_degrid_operator(
   if (uv_data.units != utilities::vis_units::lambda)
     throw std::runtime_error("Units for spherical imaging must be in lambda");
   const auto m_op = base_plane_degrid_operator<T, K>(
-      number_of_samples, theta_0, phi_0, theta, phi, uv_data.u, uv_data.v, uv_data.w,
+      number_of_samples, phi_0, theta_0, phi, theta, uv_data.u, uv_data.v, uv_data.w,
       uv_data.weights, oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jv, Jl, Jm,
       ft_plan, uvw_stacking, L, M, 1, beam_l, beam_m);
 

@@ -121,8 +121,8 @@ int main(int, char **) {
   std::string const inputfile = output_filename(name + "_" + "input.fits");
 
   pfitsio::write2d(all_sky_image.real(), inputfile);
-  const t_real theta_0 = 0. * constant::pi / 180.;
-  const t_real phi_0 = 90. * constant::pi / 180.;
+  const t_real phi_0 = 0. * constant::pi / 180.;
+  const t_real theta_0 = 90. * constant::pi / 180.;
 
   t_int const number_of_pxiels = all_sky_image.size();
   t_int const number_of_vis = 1e5;
@@ -134,10 +134,10 @@ int main(int, char **) {
                     uv_data.u.size() * 1. / number_of_pxiels);
   t_uint const imsizey = all_sky_image.rows();
   t_uint const imsizex = all_sky_image.cols();
-  const t_int num_theta = all_sky_image.rows();
-  const t_int num_phi = all_sky_image.cols();
+  const t_int num_phi = all_sky_image.rows();
+  const t_int num_theta = all_sky_image.cols();
 
-  const t_int number_of_samples = num_theta * num_phi;
+  const t_int number_of_samples = num_phi * num_theta;
   const t_int Jl = 4;
   const t_int Jm = 4;
   const t_int Ju = 4;
@@ -151,17 +151,17 @@ int main(int, char **) {
   const kernels::kernel kernel = kernels::kernel::kb;
   const operators::fftw_plan ft_plan = operators::fftw_plan::measure;
 
-  const auto phi = [num_phi, num_theta](const t_int k) -> t_real {
-    return utilities::ind2row(k, num_phi, num_theta) * constant::pi / num_phi;
-  };
   const auto theta = [num_theta, num_phi](const t_int k) -> t_real {
-    return utilities::ind2col(k, num_phi, num_theta) * 2 * constant::pi / num_theta;
+    return utilities::ind2row(k, num_theta, num_phi) * constant::pi / num_theta;
+  };
+  const auto phi = [num_phi, num_theta](const t_int k) -> t_real {
+    return utilities::ind2col(k, num_theta, num_phi) * 2 * constant::pi / num_phi;
   };
   std::shared_ptr<sopt::LinearTransform<Vector<t_complex>>> const sky_measurements =
       std::get<2>(sopt::algorithm::normalise_operator<Vector<t_complex>>(
           spherical_resample::measurement_operator::nonplanar_degrid_wproj_operator<
               Vector<t_complex>, std::function<t_real(t_int)>>(
-              number_of_samples, theta_0, phi_0, theta, phi, uv_data, oversample_ratio,
+              number_of_samples, phi_0, theta_0, phi, theta, uv_data, oversample_ratio,
               oversample_ratio_image_domain, kernel, Ju, Jw, Jl, Jm, ft_plan, uvw_stacking, L, 1e-6,
               1e-6, beam_l, beam_m),
           1000, 1e-4, Vector<t_complex>::Random(imsizex * imsizey).eval()));
