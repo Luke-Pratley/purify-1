@@ -33,6 +33,7 @@ if(PURIFY_ARRAYFIRE)
 endif()
 if(PURIFY_MPI)
   add_example(mpi_spherical_reconstruction NOTEST LIBRARIES libpurify)
+  add_example(mpi_spherical_reconstruction_real_data NOTEST LIBRARIES libpurify)
 
   add_example(global_epsilon_replicated_grids_mpi padmm_mpi_random_coverage.cc NOTEST
     LIBRARIES libpurify ${Boost_FILESYSTEM_LIBRARY} ${Boost_SYSTEM_LIBRARY})
