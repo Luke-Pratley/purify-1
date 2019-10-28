@@ -6,6 +6,7 @@
 #include <iostream>
 #include <tuple>
 #include <type_traits>
+#include "purify/fly_operators.h"
 #include "purify/kernels.h"
 #include "purify/logging.h"
 #include "purify/utilities.h"
@@ -14,7 +15,6 @@
 #include "purify/wkernel_integration.h"
 #include <sopt/chained_operators.h>
 #include <sopt/linear_transform.h>
-#include "purify/fly_operators.h"
 
 #include <fftw3.h>
 
@@ -107,8 +107,8 @@ Sparse<t_complex, STORAGE_INDEX_TYPE> init_gridding_matrix_2d(
     const Vector<t_real> &w, const Vector<t_complex> &weights, const t_uint imsizey_,
     const t_uint imsizex_, const t_real oversample_ratio,
     const std::function<t_real(t_real)> &ftkerneluv, const std::function<t_real(t_real)> &kerneluv,
-    const t_uint Ju, const t_uint Jw, const t_real du, const t_real dv,
-    const t_real abs_error, const t_real rel_error, const dde_type dde) {
+    const t_uint Ju, const t_uint Jw, const t_real du, const t_real dv, const t_real abs_error,
+    const t_real rel_error, const dde_type dde) {
   const t_uint ftsizev_ = std::floor(imsizey_ * oversample_ratio);
   const t_uint ftsizeu_ = std::floor(imsizex_ * oversample_ratio);
   PURIFY_HIGH_LOG("du x du: {}, {}", du, dv);
