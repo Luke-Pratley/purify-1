@@ -5,6 +5,10 @@
 #include "purify/types.h"
 #include <set>
 #include "purify/operators.h"
+#include "purify/kernels.h"
+#include "purify/logging.h"
+#include "purify/utilities.h"
+#include "purify/uvw_utilities.h"
 
 #ifdef PURIFY_MPI
 #include "purify/AllToAllSparseVector.h"
