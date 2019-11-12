@@ -6,6 +6,7 @@
 #include "purify/types.h"
 #include "purify/convergence_factory.h"
 #include "purify/logging.h"
+#include "purify/random_update_factory.h"
 #include "purify/utilities.h"
 #include "purify/uvw_utilities.h"
 
@@ -26,10 +27,11 @@
 namespace purify {
 namespace factory {
 enum class algorithm { padmm, primal_dual, sdmm, forward_backward };
-enum class algo_distribution { serial, mpi_serial, mpi_distributed };
+enum class algo_distribution { serial, mpi_serial, mpi_distributed, mpi_random_updates };
 const std::map<std::string, algo_distribution> algo_distribution_string = {
     {"none", algo_distribution::serial},
     {"serial-equivalent", algo_distribution::mpi_serial},
+    {"random-updates", algo_distribution::mpi_random_updates},
     {"fully-distributed", algo_distribution::mpi_distributed}};
 
 //! return chosen algorithm given parameters
@@ -50,24 +52,25 @@ padmm_factory(const algo_distribution dist,
               const bool real_constraint = true, const bool positive_constraint = true,
               const bool tight_frame = false, const t_real relative_variation = 1e-3,
               const t_real l1_proximal_tolerance = 1e-2,
-              const t_uint maximum_proximal_iterations = 50) {
+              const t_uint maximum_proximal_iterations = 50,
+              const t_real residual_tolerance_scaling = 1, const t_real op_norm = 1) {
   typedef typename Algorithm::Scalar t_scalar;
   if (sara_size > 1 and tight_frame)
     throw std::runtime_error(
         "l1 proximal not consistent: You say you are using a tight frame, but you have more than "
         "one wavelet basis.");
-  auto epsilon = utilities::calculate_l2_radius(uv_data.vis.size(), sigma);
+  auto epsilon = std::sqrt(2 * uv_data.size() + 2 * std::sqrt(4 * uv_data.size())) * sigma;
   auto padmm = std::make_shared<Algorithm>(uv_data.vis);
   padmm->itermax(max_iterations)
       .relative_variation(relative_variation)
       .tight_frame(tight_frame)
       .l1_proximal_tolerance(l1_proximal_tolerance)
-      .l1_proximal_nu(1.)
+      .l1_proximal_nu(1)
       .l1_proximal_itermax(maximum_proximal_iterations)
       .l1_proximal_positivity_constraint(positive_constraint)
       .l1_proximal_real_constraint(real_constraint)
       .lagrange_update_scale(0.9)
-      .nu(1e0)
+      .nu(op_norm * op_norm)
       .Psi(*wavelets)
       .Phi(*measurements);
 #ifdef PURIFY_MPI
@@ -75,32 +78,39 @@ padmm_factory(const algo_distribution dist,
   ConvergenceType rel_conv = ConvergenceType::mpi_global;
 #endif
   switch (dist) {
-  case (algo_distribution::serial): {
+  case (algo_distribution::serial):
     padmm
         ->gamma((wavelets->adjoint() * (measurements->adjoint() * uv_data.vis).eval())
                     .cwiseAbs()
                     .maxCoeff() *
                 1e-3)
         .l2ball_proximal_epsilon(epsilon)
-        .residual_tolerance(epsilon);
+        .residual_tolerance(epsilon * residual_tolerance_scaling);
     return padmm;
-  }
+    break;
+
 #ifdef PURIFY_MPI
   case (algo_distribution::mpi_serial): {
     obj_conv = ConvergenceType::mpi_global;
     rel_conv = ConvergenceType::mpi_global;
     auto const comm = sopt::mpi::Communicator::World();
-    epsilon =
-        utilities::calculate_l2_radius(comm.all_sum_all(uv_data.vis.size()), comm.broadcast(sigma));
+    epsilon = std::sqrt(2 * comm.all_sum_all(uv_data.size()) +
+                        2 * std::sqrt(4 * comm.all_sum_all(uv_data.size()))) *
+              sigma;
     // communicator ensuring l2 norm in l2ball proximal is global
     padmm->l2ball_proximal_communicator(comm);
-    break;
-  }
+  } break;
+
   case (algo_distribution::mpi_distributed): {
     obj_conv = ConvergenceType::mpi_local;
     rel_conv = ConvergenceType::mpi_local;
-    break;
-  }
+    auto const comm = sopt::mpi::Communicator::World();
+    epsilon = std::sqrt(2 * uv_data.size() + 2 * std::sqrt(4 * uv_data.size()) *
+                                                 std::sqrt(comm.all_sum_all(4 * uv_data.size())) /
+                                                 comm.all_sum_all(std::sqrt(4 * uv_data.size()))) *
+              sigma;
+  } break;
+
 #endif
   default:
     throw std::runtime_error(
@@ -111,10 +121,12 @@ padmm_factory(const algo_distribution dist,
   auto const comm = sopt::mpi::Communicator::World();
   std::weak_ptr<Algorithm> const padmm_weak(padmm);
   // set epsilon
-  padmm->residual_tolerance(epsilon).l2ball_proximal_epsilon(epsilon);
+  padmm->residual_tolerance(epsilon * residual_tolerance_scaling).l2ball_proximal_epsilon(epsilon);
   // set gamma
   padmm->gamma(comm.all_reduce(
-      utilities::step_size(uv_data.vis, measurements, wavelets, sara_size) * 1e-3, MPI_MAX));
+      utilities::step_size<Vector<t_complex>>(uv_data.vis, measurements, wavelets, sara_size) *
+          1e-3,
+      MPI_MAX));
   // communicator ensuring l1 norm in l1 proximal is global
   padmm->l1_proximal_adjoint_space_comm(comm);
   padmm->residual_convergence(
@@ -140,8 +152,8 @@ fb_factory(const algo_distribution dist,
            const t_uint sara_size, const t_uint max_iterations = 500,
            const bool real_constraint = true, const bool positive_constraint = true,
            const bool tight_frame = false, const t_real relative_variation = 1e-3,
-           const t_real l1_proximal_tolerance = 1e-2,
-           const t_uint maximum_proximal_iterations = 50) {
+           const t_real l1_proximal_tolerance = 1e-2, const t_uint maximum_proximal_iterations = 50,
+           const t_real op_norm = 1) {
   typedef typename Algorithm::Scalar t_scalar;
   if (sara_size > 1 and tight_frame)
     throw std::runtime_error(
@@ -150,8 +162,8 @@ fb_factory(const algo_distribution dist,
   auto fb = std::make_shared<Algorithm>(uv_data.vis);
   fb->itermax(max_iterations)
       .gamma(reg_parameter)
-      .sigma(sigma)
-      .beta(step_size)
+      .sigma(sigma * std::sqrt(2))
+      .beta(step_size * std::sqrt(2))
       .relative_variation(relative_variation)
       .tight_frame(tight_frame)
       .l1_proximal_tolerance(l1_proximal_tolerance)
@@ -159,7 +171,7 @@ fb_factory(const algo_distribution dist,
       .l1_proximal_itermax(maximum_proximal_iterations)
       .l1_proximal_positivity_constraint(positive_constraint)
       .l1_proximal_real_constraint(real_constraint)
-      .nu(1e0)
+      .nu(op_norm * op_norm)
       .Psi(*wavelets)
       .Phi(*measurements);
   switch (dist) {
@@ -197,16 +209,20 @@ primaldual_factory(
     const utilities::vis_params &uv_data, const t_real sigma, const t_uint imsizey,
     const t_uint imsizex, const t_uint sara_size, const t_uint max_iterations = 500,
     const bool real_constraint = true, const bool positive_constraint = true,
-    const t_real relative_variation = 1e-3) {
+    const t_real relative_variation = 1e-3, const t_real residual_tolerance_scaling = 1,
+    const t_real op_norm = 1) {
   typedef typename Algorithm::Scalar t_scalar;
-  auto epsilon = utilities::calculate_l2_radius(uv_data.vis.size(), sigma);
+  auto epsilon = std::sqrt(2 * uv_data.size() + 2 * std::sqrt(4 * uv_data.size())) * sigma;
   auto primaldual = std::make_shared<Algorithm>(uv_data.vis);
   primaldual->itermax(max_iterations)
       .relative_variation(relative_variation)
       .real_constraint(real_constraint)
       .positivity_constraint(positive_constraint)
       .Psi(*wavelets)
-      .Phi(*measurements);
+      .Phi(*measurements)
+      .tau(0.5 / (op_norm * op_norm + 1))
+      .xi(1.)
+      .sigma(1.);
 #ifdef PURIFY_MPI
   ConvergenceType obj_conv = ConvergenceType::mpi_global;
   ConvergenceType rel_conv = ConvergenceType::mpi_global;
@@ -219,7 +235,7 @@ primaldual_factory(
                     .maxCoeff() *
                 1e-3)
         .l2ball_proximal_epsilon(epsilon)
-        .residual_tolerance(epsilon);
+        .residual_tolerance(epsilon * residual_tolerance_scaling);
     return primaldual;
   }
 #ifdef PURIFY_MPI
@@ -227,17 +243,44 @@ primaldual_factory(
     obj_conv = ConvergenceType::mpi_global;
     rel_conv = ConvergenceType::mpi_global;
     auto const comm = sopt::mpi::Communicator::World();
-    epsilon =
-        utilities::calculate_l2_radius(comm.all_sum_all(uv_data.vis.size()), comm.broadcast(sigma));
+    epsilon = std::sqrt(2 * comm.all_sum_all(uv_data.size()) +
+                        2 * std::sqrt(4 * comm.all_sum_all(uv_data.size()))) *
+              sigma;
     // communicator ensuring l2 norm in l2ball proximal is global
     primaldual->l2ball_proximal_communicator(comm);
-    break;
-  }
+  } break;
   case (algo_distribution::mpi_distributed): {
     obj_conv = ConvergenceType::mpi_local;
     rel_conv = ConvergenceType::mpi_local;
-    break;
-  }
+    auto const comm = sopt::mpi::Communicator::World();
+    epsilon = std::sqrt(2 * uv_data.size() + 2 * std::sqrt(4 * uv_data.size()) *
+                                                 std::sqrt(comm.all_sum_all(4 * uv_data.size())) /
+                                                 comm.all_sum_all(std::sqrt(4 * uv_data.size()))) *
+              sigma;
+  } break;
+  case (algo_distribution::mpi_random_updates): {
+    auto const comm = sopt::mpi::Communicator::World();
+    epsilon = std::sqrt(2 * uv_data.size() + 2 * std::sqrt(4 * uv_data.size()) *
+                                                 std::sqrt(comm.all_sum_all(4 * uv_data.size())) /
+                                                 comm.all_sum_all(std::sqrt(4 * uv_data.size()))) *
+              sigma;
+    obj_conv = ConvergenceType::mpi_local;
+    rel_conv = ConvergenceType::mpi_local;
+    std::shared_ptr<bool> random_measurement_update_ptr = std::make_shared<bool>(true);
+    std::shared_ptr<bool> random_wavelet_update_ptr = std::make_shared<bool>(true);
+    const t_int update_size = std::max<t_int>(std::floor(0.5 * comm.size()), 1);
+    auto random_measurement_updater = random_updater::random_updater(
+        comm, comm.size(), update_size, random_measurement_update_ptr, "measurements");
+    auto random_wavelet_updater = random_updater::random_updater(
+        comm, std::min<t_int>(comm.size(), std::floor(comm.all_sum_all(sara_size))),
+        std::min<t_int>(update_size, std::floor(0.5 * comm.all_sum_all(sara_size))),
+        random_measurement_update_ptr, "wavelets");
+
+    primaldual->random_measurement_updater(random_measurement_updater)
+        .random_wavelet_updater(random_wavelet_updater)
+        .v_all_sum_all_comm(comm)
+        .u_all_sum_all_comm(comm);
+  } break;
 #endif
   default:
     throw std::runtime_error(
@@ -248,10 +291,13 @@ primaldual_factory(
   auto const comm = sopt::mpi::Communicator::World();
   std::weak_ptr<Algorithm> const primaldual_weak(primaldual);
   // set epsilon
-  primaldual->residual_tolerance(epsilon).l2ball_proximal_epsilon(epsilon);
+  primaldual->residual_tolerance(epsilon * residual_tolerance_scaling)
+      .l2ball_proximal_epsilon(epsilon);
   // set gamma
   primaldual->gamma(comm.all_reduce(
-      utilities::step_size(uv_data.vis, measurements, wavelets, sara_size) * 1e-3, MPI_MAX));
+      utilities::step_size<Vector<t_complex>>(uv_data.vis, measurements, wavelets, sara_size) *
+          1e-3,
+      MPI_MAX));
   // communicator ensuring l1 norm in l1 proximal is global
   primaldual->residual_convergence(
       purify::factory::l2_convergence_factory<typename Algorithm::Scalar>(rel_conv,
@@ -270,16 +316,16 @@ std::shared_ptr<Algorithm> algorithm_factory(const factory::algorithm algo, ARGS
     return padmm_factory<Algorithm>(std::forward<ARGS>(args)...);
     break;
     /*
-  case algorithm::primal_dual:
-    return pd_factory(std::forward<ARGS>(args)...);
-    break;
-  case algorithm::sdmm:
-    return sdmm_factory(std::forward<ARGS>(args)...);
-    break;
-  case algorithm::forward_backward:
-    return fb_factory(std::forward<ARGS>(args)...);
-    break;
-    */
+       case algorithm::primal_dual:
+       return pd_factory(std::forward<ARGS>(args)...);
+       break;
+       case algorithm::sdmm:
+       return sdmm_factory(std::forward<ARGS>(args)...);
+       break;
+       case algorithm::forward_backward:
+       return fb_factory(std::forward<ARGS>(args)...);
+       break;
+       */
   default:
     throw std::runtime_error("Algorithm not implimented.");
   }

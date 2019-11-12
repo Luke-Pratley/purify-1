@@ -3,6 +3,7 @@
 
 #include "purify/config.h"
 #include "purify/types.h"
+#include <set>
 #include "purify/operators.h"
 
 #ifdef PURIFY_MPI
@@ -71,7 +72,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
                        ftsizeu_, ftsizev_](T &output, const T &input) {
     output = T::Zero(u_ptr->size());
     assert(input.size() == ftsizeu_ * ftsizev_);
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
       const t_real u_val = (*u_ptr)(m);
@@ -106,12 +109,23 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
                      ftsizeu_, ftsizev_, mapping, nonZeros_vec](T &output, const T &input) {
     const t_int N = ftsizeu_ * ftsizev_;
     output = T::Zero(N);
-    T output_compressed = T::Zero(nonZeros_vec.size() * omp_get_max_threads());
+#ifdef PURIFY_OPENMP
+    t_int const max_threads = omp_get_max_threads();
+#else
+    t_int const max_threads = 1;
+#endif
+    T output_compressed = T::Zero(nonZeros_vec.size() * max_threads);
     assert(output.size() == N);
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
+#ifdef PURIFY_OPENMP
       const t_int shift = omp_get_thread_num() * nonZeros_vec.size();
+#else
+      const t_int shift = 0;
+#endif
       const t_real u_val = (*u_ptr)(m);
       const t_real v_val = (*v_ptr)(m);
       const t_real k_u = std::floor(u_val - ju_max * 0.5);
@@ -137,7 +151,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
         }
       }
     }
-    for (t_int m = 1; m < omp_get_max_threads(); m++) {
+    for (t_int m = 1; m < max_threads; m++) {
       const t_int loop_shift = m * nonZeros_vec.size();
       output_compressed.segment(0, nonZeros_vec.size()) +=
           output_compressed.segment(loop_shift, nonZeros_vec.size());
@@ -382,11 +396,20 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
                      ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
                      comm](T &output, const T &input) {
     const t_int N = ftsizeu_ * ftsizev_;
-    T output_compressed = T::Zero(nonZeros_size * omp_get_max_threads());
+#ifdef PURIFY_OPENMP
+    t_int const max_threads = omp_get_max_threads();
+#else
+    t_int const max_threads = 1;
+#endif
+    T output_compressed = T::Zero(nonZeros_size * max_threads);
 #pragma omp parallel for
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
+#ifdef PURIFY_OPENMP
       const t_int shift = omp_get_thread_num() * nonZeros_size;
+#else
+      const t_int shift = 0;
+#endif
       const t_real u_val = (*u_ptr)(m);
       const t_real v_val = (*v_ptr)(m);
       const t_real k_u = std::floor(u_val - ju_max * 0.5);
@@ -413,7 +436,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       }
     }
     T output_sum = T::Zero(nonZeros_size);
-    for (t_int m = 0; m < omp_get_max_threads(); m++) {
+    for (t_int m = 0; m < max_threads; m++) {
       const t_int loop_shift = m * nonZeros_size;
       output_sum += output_compressed.segment(loop_shift, nonZeros_size);
     }
@@ -542,12 +565,21 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
                      comm](T &output, const T &input) {
     const t_int N = ftsizeu_ * ftsizev_;
     output = T::Zero(N);
-    T output_compressed = T::Zero(nonZeros_size * omp_get_max_threads());
+#ifdef PURIFY_OPENMP
+    t_int const max_threads = omp_get_max_threads();
+#else
+    t_int const max_threads = 1;
+#endif
+    T output_compressed = T::Zero(nonZeros_size * max_threads);
     assert(output.size() == N);
 #pragma omp parallel for
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
+#ifdef PURIFY_OPENMP
       const t_int shift = omp_get_thread_num() * nonZeros_size;
+#else
+      const t_int shift = 0;
+#endif
       const t_real u_val = (*u_ptr)(m);
       const t_real v_val = (*v_ptr)(m);
       const t_real k_u = std::floor(u_val - ju_max * 0.5);
@@ -576,7 +608,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
         }
       }
     }
-    for (t_int m = 1; m < omp_get_max_threads(); m++) {
+    for (t_int m = 1; m < max_threads; m++) {
       const t_int loop_shift = m * nonZeros_size;
       output_compressed.segment(0, nonZeros_size) +=
           output_compressed.segment(loop_shift, nonZeros_size);

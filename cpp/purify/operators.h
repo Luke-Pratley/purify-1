@@ -16,6 +16,8 @@
 #include <sopt/chained_operators.h>
 #include <sopt/linear_transform.h>
 
+#include "purify/fly_operators.h"
+
 #include <fftw3.h>
 
 #ifdef PURIFY_MPI
@@ -295,13 +297,13 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_gridding_m
 //! Construct MPI broadcast operator
 template <class T>
 sopt::OperatorFunction<T> init_broadcaster(const sopt::mpi::Communicator &comm) {
-  return [=](T &output, const T &input) { output = comm.broadcast<T>(input); };
+  return [=](T &output, const T &input) { output = comm.broadcast<T>(input).eval(); };
 }
 
 //! Construct MPI all sum all operator
 template <class T>
 sopt::OperatorFunction<T> init_all_sum_all(const sopt::mpi::Communicator &comm) {
-  return [=](T &output, const T &input) { output = comm.all_sum_all<T>(input); };
+  return [=](T &output, const T &input) { output = comm.all_sum_all<T>(input).eval(); };
 }
 #endif
 //! constructs lambdas that apply degridding matrix with adjoint
@@ -455,8 +457,10 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   sopt::OperatorFunction<T> directZ, indirectZ;
   sopt::OperatorFunction<T> directFFT, indirectFFT;
 
-  const Image<t_complex> S = purify::details::init_correction2d(
-      oversample_ratio, imsizey, imsizex, ftkernelu, ftkernelv, w_mean, cellx, celly);
+  const Image<t_complex> S =
+      purify::details::init_correction2d(oversample_ratio, imsizey, imsizex, ftkernelu, ftkernelv,
+                                         w_mean, cellx, celly) *
+      std::sqrt(imsizex * imsizey) * oversample_ratio;
   PURIFY_LOW_LOG("Building Measurement Operator: WGFZDB");
   PURIFY_LOW_LOG(
       "Constructing Zero Padding "
