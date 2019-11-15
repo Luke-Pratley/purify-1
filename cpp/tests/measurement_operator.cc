@@ -42,7 +42,7 @@ TEST_CASE("regression_degrid") {
     const t_real max_test = y_test.cwiseAbs().mean();
     CAPTURE(y_test / max_test);
     CAPTURE(y);
-    CHECK((y_test / max_test).isApprox((y), 1e-6));
+    CHECK((y_test / max_test).isApprox((y), 1e-5));
   }
   SECTION("pswf") {
     const kernels::kernel kernel = kernels::kernel::pswf;
