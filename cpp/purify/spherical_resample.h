@@ -245,10 +245,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   const t_int imsizey_upsampled = std::floor(imsizey * oversample_ratio_image_domain);
   const t_int ftsizeu_cropped = std::floor(imsizex * oversample_ratio);
   const t_int ftsizev_cropped = std::floor(imsizey * oversample_ratio);
-  const t_int ftsizeu =
-      std::floor(imsizex * oversample_ratio_image_domain * oversample_ratio_image_domain);
-  const t_int ftsizev =
-      std::floor(imsizey * oversample_ratio_image_domain * oversample_ratio_image_domain);
+  const t_int ftsizeu = std::floor(imsizex * oversample_ratio * oversample_ratio_image_domain);
+  const t_int ftsizev = std::floor(imsizey * oversample_ratio * oversample_ratio_image_domain);
   PURIFY_LOW_LOG("Building Measurement Operator with Sampling on the Sphere");
   PURIFY_LOW_LOG(
       "Constructing Zero Padding "
@@ -258,15 +256,16 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   PURIFY_MEDIUM_LOG("Oversampling Factor of FT grid: {}", oversample_ratio);
   PURIFY_MEDIUM_LOG("Oversampling Factor of Image grid: {}", oversample_ratio_image_domain);
 
-  const Image<t_complex> S_l =
-      purify::details::init_correction2d(oversample_ratio, imsizey_upsampled, imsizex_upsampled,
-                                         [oversample_ratio_image_domain, &ftkernelu](t_real x) {
-                                           return ftkernelu(x / oversample_ratio_image_domain);
-                                         },
-                                         [oversample_ratio_image_domain, &ftkernelv](t_real x) {
-                                           return ftkernelv(x / oversample_ratio_image_domain);
-                                         },
-                                         0., 0., 0.);
+  const Image<t_complex> S_l = purify::details::init_correction2d(
+                                   oversample_ratio, imsizey_upsampled, imsizex_upsampled,
+                                   [oversample_ratio_image_domain, &ftkernelu](t_real x) {
+                                     return ftkernelu(x / oversample_ratio_image_domain);
+                                   },
+                                   [oversample_ratio_image_domain, &ftkernelv](t_real x) {
+                                     return ftkernelv(x / oversample_ratio_image_domain);
+                                   },
+                                   0., 0., 0.) *
+                               std::sqrt(static_cast<t_real>(ftsizeu * ftsizev));
 
   std::tie(directZ_image_domain, indirectZ_image_domain) =
       purify::operators::init_zero_padding_2d<T>(S_l, oversample_ratio);
@@ -312,10 +311,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   const t_int imsizey_upsampled = std::floor(imsizey * oversample_ratio_image_domain);
   const t_int ftsizeu_cropped = std::floor(imsizex * oversample_ratio);
   const t_int ftsizev_cropped = std::floor(imsizey * oversample_ratio);
-  const t_int ftsizeu =
-      std::floor(imsizex * oversample_ratio_image_domain * oversample_ratio_image_domain);
-  const t_int ftsizev =
-      std::floor(imsizey * oversample_ratio_image_domain * oversample_ratio_image_domain);
+  const t_int ftsizeu = std::floor(imsizex * oversample_ratio * oversample_ratio_image_domain);
+  const t_int ftsizev = std::floor(imsizey * oversample_ratio * oversample_ratio_image_domain);
   PURIFY_LOW_LOG("Building Measurement Operator with Sampling on the Sphere");
   PURIFY_LOW_LOG(
       "Constructing Zero Padding "
@@ -325,8 +322,10 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   PURIFY_MEDIUM_LOG("Oversampling Factor of FT grid: {}", oversample_ratio);
   PURIFY_MEDIUM_LOG("Oversampling Factor of Image grid: {}", oversample_ratio_image_domain);
 
-  const Image<t_complex> S_l = purify::details::init_correction_radial_2d(
-      oversample_ratio, imsizey_upsampled, imsizex_upsampled, ftkerneluv, 0., 0., 0.);
+  const Image<t_complex> S_l =
+      purify::details::init_correction_radial_2d(oversample_ratio, imsizey_upsampled,
+                                                 imsizex_upsampled, ftkerneluv, 0., 0., 0.) *
+      std::sqrt(static_cast<t_real>(ftsizeu * ftsizev));
 
   std::tie(directZ_image_domain, indirectZ_image_domain) =
       purify::operators::init_zero_padding_2d<T>(S_l, oversample_ratio);
