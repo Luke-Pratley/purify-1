@@ -60,7 +60,8 @@ t_complex exact_w_projection_integration(const t_real u, const t_real v, const t
   xmax(1) = oversample_ratio / 2.;
   const Vector<t_real> xmin = -xmax;
   return integration::integrate(xmin, xmax, func, integration::norm_type::paired, absolute_error,
-                                relative_error, max_evaluations, method);
+                                relative_error, max_evaluations, method) /
+         (xmin(0) - xmax(0)) / (xmin(1) - xmax(1));
 }
 }  // namespace projection_kernels
 }  // namespace purify

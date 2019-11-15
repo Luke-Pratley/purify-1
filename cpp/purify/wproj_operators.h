@@ -32,7 +32,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   const t_real dl = L / imsizex;
   const t_real dm = M / imsizey;
   const Image<t_complex> S = purify::details::init_correction_radial_2d(
-      oversample_ratio, imsizey, imsizex, ftkerneluv, w_mean, dl, dm);
+                                 oversample_ratio, imsizey, imsizex, ftkerneluv, w_mean, dl, dm) *
+                             std::sqrt(imsizey * imsizex) * oversample_ratio;
   PURIFY_LOW_LOG("Building Measurement Operator: WGFZDB");
   PURIFY_LOW_LOG(
       "Constructing Zero Padding "
