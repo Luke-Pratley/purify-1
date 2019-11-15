@@ -33,7 +33,9 @@ int main(int nargs, char const **args) {
   auto const session = sopt::mpi::init(nargs, args);
   auto const comm = sopt::mpi::Communicator::World();
 
-  const std::string &file_name = "MWA-puppisA-small.uvfits";
+  const std::vector<std::string> &file_names =
+      std::vector<std::string>{"/home/ucaslmw/Scratch/purify/build/1098564400_1.uvfits",
+                               "/home/ucaslmw/Scratch/purify/build/1098564400_2.uvfits"};
   const std::string &outfile_fits = "sphere_sol.fits";
   const std::string &residual_fits = "sphere_res.fits";
   const std::string &dirtyfile = "sphere_dirty.fits";
