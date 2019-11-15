@@ -149,7 +149,7 @@ std::vector<t_real> kernel_samples(const t_int total_samples,
      */
   std::vector<t_real> samples(total_samples);
   for (Vector<t_real>::Index i = 0; i < static_cast<t_int>(total_samples); ++i) {
-    samples[i] = kernelu(static_cast<t_real>(i) / total_samples);
+    samples[i] = kernelu(static_cast<t_real>(i) / (total_samples - 1));
   }
   return samples;
 }
