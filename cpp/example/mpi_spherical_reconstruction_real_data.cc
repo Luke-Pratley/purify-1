@@ -66,7 +66,8 @@ int main(int nargs, char const **args) {
   std::vector<t_int> image_index;
   std::vector<t_real> w_stacks;
   {
-    uv_data = read_measurements::read_measurements(file_name, comm, distribute::plan::radial, true);
+    uv_data =
+        read_measurements::read_measurements(file_names, comm, distribute::plan::radial, true);
     uv_data = utilities::conjugate_w(uv_data);
     t_int const imsize = comm.all_reduce<t_real>(
         std::pow(
