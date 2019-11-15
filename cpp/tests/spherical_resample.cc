@@ -5,6 +5,8 @@
 #include "purify/directories.h"
 #include "purify/logging.h"
 
+#include "purify/pfitsio.h"
+
 #include "purify/kernels.h"
 #include "purify/spherical_resample.h"
 
@@ -143,7 +145,7 @@ TEST_CASE("Test FT Scaling and Padding") {
   const std::function<t_real(t_real)>& ftkernelm = std::get<3>(kernelstuff);
 
   const Image<t_complex> S_u = purify::details::init_correction2d(
-      oversample_ratio, imsizey, imsizex, ftkernell, ftkernelm, 0., 1., 1.);
+      oversample_ratio, imsizey, imsizex, ftkernell, ftkernelm, 0., 0., 0.);
 
   auto FT_Z_op =
       spherical_resample::init_FT_zero_padding_2d<Vector<t_complex>>(S_u, oversample_ratio);
@@ -220,10 +222,13 @@ TEST_CASE("Test FFT Correction") {
   const Vector<t_complex> image_on_plane = interrpolation_matrix.adjoint() * point_source;
 
   SECTION("FFT operation") {
-    const Image<t_complex> S_l = purify::details::init_correction2d(
-        oversample_ratio, std::floor(imsizey * oversample_ratio_image_domain),
-        std::floor(imsizex * oversample_ratio_image_domain), [](t_real x) { return 1.; },
-        [](t_real x) { return 1.; }, 0., 0., 0.);
+    const Image<t_complex> S_l =
+        purify::details::init_correction2d(
+            oversample_ratio, std::floor(imsizey * oversample_ratio_image_domain),
+            std::floor(imsizex * oversample_ratio_image_domain), [](t_real x) { return 1.; },
+            [](t_real x) { return 1.; }, 0., 0., 0.) *
+        std::sqrt(imsizex * imsizey * oversample_ratio * oversample_ratio *
+                  oversample_ratio_image_domain * oversample_ratio_image_domain);
 
     const auto Z_image_domain_op =
         purify::operators::init_zero_padding_2d<Vector<t_complex>>(S_l, oversample_ratio);
@@ -318,13 +323,14 @@ TEST_CASE("planar grid degrid") {
             imsizex, oversample_ratio, oversample_ratio_image_domain, ft_plan);
 
     sopt::OperatorFunction<Vector<t_complex>> directG, indirectG;
-    std::tie(directG, indirectG) = purify::operators::init_gridding_matrix_2d<Vector<t_complex>>(
-        u, v, weights, imsizey, imsizex, oversample_ratio, kernelv, kernelu, Ju, Jv);
+    std::tie(directG, indirectG) =
+        purify::operators::init_on_the_fly_gridding_matrix_2d<Vector<t_complex>>(
+            u, v, weights, imsizey, imsizex, oversample_ratio, kernelv, kernelu, Ju, Jv, 4e5);
 
     const auto direct = sopt::chained_operators<Vector<t_complex>>(directG, directZFZ);
     const auto indirect = sopt::chained_operators<Vector<t_complex>>(indirectZFZ, indirectG);
     auto const measure_op = operators::base_degrid_operator_2d<Vector<t_complex>>(
-        u, v, w, weights, imsizey, imsizex, oversample_ratio, kernel, Ju, Jv, ft_plan, false, 1, 1);
+        u, v, w, weights, imsizey, imsizex, oversample_ratio, kernel, Ju, Jv, ft_plan, false, 0, 0);
     const auto& forward_expected_op = std::get<0>(measure_op);
     const auto& adjoint_expected_op = std::get<1>(measure_op);
     SECTION("Forward") {
@@ -342,13 +348,14 @@ TEST_CASE("planar grid degrid") {
     }
     SECTION("adjoint") {
       const Vector<t_complex> input = Vector<t_complex>::Ones(1);
-      Vector<t_complex> output;
+      Vector<t_complex> output = Vector<t_complex>::Zero(
+          imsizex * imsizey * oversample_ratio_image_domain * oversample_ratio_image_domain);
       indirect(output, input);
-      CAPTURE(output.head(5));
+      CAPTURE(output.head(20));
       CAPTURE(input);
       Vector<t_complex> output_expected;
       adjoint_expected_op(output_expected, input);
-      CAPTURE(output_expected.head(5));
+      CAPTURE(output_expected.head(20));
       CHECK(output.isApprox(output_expected, 1e-6));
     }
   }
@@ -395,7 +402,9 @@ TEST_CASE("planar grid degrid") {
       Vector<t_complex> output_expected;
       forward_expected_op(output_expected, input);
       CHECK(output.size() == 1);
-      CHECK(std::imag(output(0)) == Approx(0.).margin(1e-3));
+      CHECK(std::imag(output(0)) ==
+            Approx(0.).margin(1e-3 * imsizex * imsizex * oversample_ratio * oversample_ratio *
+                              oversample_ratio_image_domain * oversample_ratio_image_domain));
       CAPTURE(output_expected.head(1));
       CAPTURE(output.head(1));
       CAPTURE(1. / output.head(1).array());
@@ -406,11 +415,17 @@ TEST_CASE("planar grid degrid") {
       const Vector<t_complex> input = Vector<t_complex>::Ones(1);
       Vector<t_complex> output;
       indirect(output, input);
+      pfitsio::write2d(output, imsizey * oversample_ratio_image_domain,
+                       imsizex * oversample_ratio_image_domain, "adj_test.fits");
+      pfitsio::write2d(output.cwiseAbs(), imsizey, imsizex, "adj_test_abs.fits");
+      pfitsio::write2d(output.imag(), imsizey, imsizex, "adj_test_imag.fits");
       CAPTURE(output.head(5));
       CAPTURE(input);
       Vector<t_complex> output_expected;
       adjoint_expected_op(output_expected, input);
       CAPTURE(output_expected.head(5));
+      pfitsio::write2d(output_expected, imsizey, imsizex, "adj_test_exp.fits");
+      pfitsio::write2d(output_expected.imag(), imsizey, imsizex, "adj_test_exp_imag.fits");
       CAPTURE(1. / output.head(5).array());
       CAPTURE(1. / output_expected.head(5).array());
       CHECK(output.isApprox(output_expected, 1e-6));
