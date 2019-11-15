@@ -65,12 +65,11 @@ template <class DDE>
 Matrix<t_complex> generate_chirp(const DDE &dde, const t_real w_rate, const t_real dl,
                                  const t_real dm, const t_uint x_size, const t_uint y_size,
                                  const t_real stop_gap = 0.1) {
-  const t_real nz = y_size * x_size;
   const t_complex I(0, 1);
   const auto chirp = [=](const t_real y, const t_real x) {
     return dde(y, x) *
            (std::exp(-2 * constant::pi * I * w_rate * (std::sqrt(1 - x * x - y * y) - 1))) /
-           std::sqrt(1 - x * x - y * y) / nz;
+           std::sqrt(1 - x * x - y * y);
   };
   return generate_dde(chirp, dl, dm, x_size, y_size, stop_gap);
 }

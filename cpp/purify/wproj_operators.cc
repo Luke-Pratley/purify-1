@@ -128,8 +128,7 @@ Image<t_complex> init_correction_radial_2d(const t_real oversample_ratio, const 
                                     std::pow((j + x_start + 0.5) / ftsizeu_ - 0.5, 2)));
 
   return gridding_correction.array() *
-         widefield::generate_chirp(w_mean, dl, dm, imsizex_, imsizey_).array() * imsizex_ *
-         imsizey_;
+         widefield::generate_chirp(w_mean, dl, dm, imsizex_, imsizey_).array();
 }
 
 }  // namespace details

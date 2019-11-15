@@ -59,8 +59,7 @@ Image<t_complex> init_correction2d(const t_real oversample_ratio, const t_uint i
   return ((1e0 / range.segment(y_start, imsizey_).unaryExpr(ftkernelv)).matrix() *
           (1e0 / range.segment(x_start, imsizex_).unaryExpr(ftkernelu)).matrix().transpose())
              .array() *
-         t_complex(1., 0.) * widefield::generate_chirp(w_mean, dl, dm, imsizex_, imsizey_).array() *
-         imsizex_ * imsizey_;
+         t_complex(1., 0.) * widefield::generate_chirp(w_mean, dl, dm, imsizex_, imsizey_).array();
 }
 
 }  // namespace details
