@@ -93,17 +93,18 @@ int main(int nargs, char const **args) {
   t_real sigma = 1;
 
   std::shared_ptr<sopt::LinearTransform<Vector<t_complex>>> const measurements_transform =
-      std::get<2>(sopt::algorithm::normalise_operator<Vector<t_complex>>(
-          spherical_resample::measurement_operator::non_planar_degrid_wproj_all_to_all_operator<
-              Vector<t_complex>, std::function<t_real(t_int)>>(
-              comm, image_index, w_stacks, number_of_samples, phi_0, theta_0, phi, theta, uv_data,
-              oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jw, Jl, Jm, ft_plan,
-              uvw_stacking, L, 1e-6, 1e-6, 0., 0.),
-          1000, 1e-3,
-          comm.broadcast<Vector<t_complex>>(Vector<t_complex>::Random(imsizex * imsizey).eval())));
+      spherical_resample::measurement_operator::non_planar_degrid_wproj_all_to_all_operator<
+          Vector<t_complex>, std::function<t_real(t_int)>>(
+          comm, image_index, w_stacks, number_of_samples, phi_0, theta_0, phi, theta, uv_data,
+          oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jw, Jl, Jm, ft_plan,
+          uvw_stacking, L, 1e-6, 1e-6, 0., 0.);
+  const t_real op_norm = std::get<0>(sopt::algorithm::power_method<Vector<t_complex>>(
+      *measurements_transform, 1000, 1e-3,
+      comm.broadcast<Vector<t_complex>>(Vector<t_complex>::Random(imsizex * imsizey).eval())));
   Vector<t_complex> dmap = measurements_transform->adjoint() * uv_data.vis;
   Image<t_complex> dmap_image = Image<t_complex>::Map(dmap.data(), imsizex, imsizey);
   if (comm.is_root()) pfitsio::write2d(dmap_image.real(), dirtyfile);
+  return 0;
   // wavelet transform
   t_uint sara_size = 0.;
   std::vector<std::tuple<std::string, t_uint>> const sara{std::make_tuple("dirac", 1u)};
@@ -113,7 +114,7 @@ int main(int nargs, char const **args) {
   auto const primaldual =
       factory::primaldual_factory<sopt::algorithm::ImagingPrimalDual<t_complex>>(
           factory::algo_distribution::mpi_serial, measurements_transform, wavelets, uv_data, sigma,
-          imsizey, imsizex, sara_size, 500);
+          imsizey, imsizex, sara_size, 500, 1, op_norm);
   auto const diagnostic = (*primaldual)();
 
   assert(diagnostic.x.size() == all_sky_image.size());
