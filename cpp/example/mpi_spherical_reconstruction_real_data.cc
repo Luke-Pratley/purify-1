@@ -34,12 +34,11 @@ int main(int nargs, char const **args) {
   auto const comm = sopt::mpi::Communicator::World();
 
   const std::vector<std::string> &file_names =
-      std::vector<std::string>{"/home/ucaslmw/Scratch/purify/build/1098564400_1.uvfits",
-                               "/home/ucaslmw/Scratch/purify/build/1098564400_2.uvfits"};
+      std::vector<std::string>{"vela_small.uvfits"};
   const std::string &outfile_fits = "sphere_sol.fits";
   const std::string &residual_fits = "sphere_res.fits";
   const std::string &dirtyfile = "sphere_dirty.fits";
-  const t_real L = 1.;
+  const t_real L = 0.5;
   const t_real max_w = 0.;  // lambda
   const t_real snr = 30;
 
@@ -57,8 +56,8 @@ int main(int nargs, char const **args) {
   const t_int Ju = 4;
   const t_int Jv = 4;
   const t_int Jw = 256;
-  const t_real oversample_ratio_image_domain = 1;
-  const t_real oversample_ratio = 1.5;
+  const t_real oversample_ratio_image_domain = 2;
+  const t_real oversample_ratio = 2;
   const bool uvw_stacking = true;
   const kernels::kernel kernel = kernels::kernel::kb;
   const operators::fftw_plan ft_plan = operators::fftw_plan::measure;
@@ -80,8 +79,16 @@ int main(int nargs, char const **args) {
     const t_real dl = L / imsize;
 
     const t_real du = widefield::dl2du(dl, imsize, oversample_ratio);
-    std::tie(uv_data, image_index, w_stacks) = utilities::w_stacking_with_all_to_all(
-        uv_data, du, Ju, Jw, comm, 100, 0, [](t_real x) { return std::sqrt(x * x); }, 1e-5);
+    uv_data = utilities::w_stacking(uv_data,
+                                 comm, 100,
+                                 [](t_real x ){return x * x;},
+                                 1e-3);
+      const t_real norm =
+          std::sqrt(comm.all_sum_all(
+                        (uv_data.weights.real().array() * uv_data.weights.real().array()).sum()) /
+                    comm.all_sum_all(uv_data.size()));
+      // normalise weights
+      uv_data.weights = uv_data.weights / norm;
   }
   const auto theta = [num_theta, num_phi](const t_int k) -> t_real {
     return (utilities::ind2row(k, num_theta, num_phi)) * constant::pi / num_theta;
@@ -90,21 +97,20 @@ int main(int nargs, char const **args) {
     return (utilities::ind2col(k, num_theta, num_phi)) * 2 * constant::pi / num_phi;
   };
 
-  t_real sigma = 1;
+  t_real sigma = 5;
 
   std::shared_ptr<sopt::LinearTransform<Vector<t_complex>>> const measurements_transform =
-      spherical_resample::measurement_operator::non_planar_degrid_wproj_all_to_all_operator<
+      spherical_resample::measurement_operator::planar_degrid_operator<
           Vector<t_complex>, std::function<t_real(t_int)>>(
-          comm, image_index, w_stacks, number_of_samples, phi_0, theta_0, phi, theta, uv_data,
-          oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jw, Jl, Jm, ft_plan,
-          uvw_stacking, L, 1e-6, 1e-6, 0., 0.);
+          comm, number_of_samples, phi_0, theta_0, phi, theta, uv_data,
+          oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jv, Jl, Jm, ft_plan,
+          uvw_stacking, L, L, 0., 0.);
   const t_real op_norm = std::get<0>(sopt::algorithm::power_method<Vector<t_complex>>(
       *measurements_transform, 1000, 1e-3,
       comm.broadcast<Vector<t_complex>>(Vector<t_complex>::Random(imsizex * imsizey).eval())));
   Vector<t_complex> dmap = measurements_transform->adjoint() * uv_data.vis;
-  Image<t_complex> dmap_image = Image<t_complex>::Map(dmap.data(), imsizex, imsizey);
+  Image<t_complex> dmap_image = Image<t_complex>::Map(dmap.data(), imsizex, imsizey)/comm.all_sum_all(uv_data.size());
   if (comm.is_root()) pfitsio::write2d(dmap_image.real(), dirtyfile);
-  return 0;
   // wavelet transform
   t_uint sara_size = 0.;
   std::vector<std::tuple<std::string, t_uint>> const sara{std::make_tuple("dirac", 1u)};
@@ -114,7 +120,9 @@ int main(int nargs, char const **args) {
   auto const primaldual =
       factory::primaldual_factory<sopt::algorithm::ImagingPrimalDual<t_complex>>(
           factory::algo_distribution::mpi_serial, measurements_transform, wavelets, uv_data, sigma,
-          imsizey, imsizex, sara_size, 500, 1, op_norm);
+          imsizey, imsizex, sara_size, 500,
+    true, true,
+    1e-3, 1, op_norm);
   auto const diagnostic = (*primaldual)();
 
   assert(diagnostic.x.size() == all_sky_image.size());
