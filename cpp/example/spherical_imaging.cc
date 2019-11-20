@@ -41,8 +41,8 @@ int main(int nargs, char const** args) {
   const t_int number_of_samples = num_phi * num_theta;
   const t_real beam_l = 0;
   const t_real beam_m = beam_l;
-  const t_int Jl = 4;
-  const t_int Jm = 4;
+  const t_int Jl = 6;
+  const t_int Jm = 6;
   const t_int Ju = 4;
   const t_int Jv = 4;
   const t_int Jw = 1000;
