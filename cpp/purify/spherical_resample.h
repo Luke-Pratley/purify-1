@@ -375,8 +375,12 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   t_real const v_mean = uvw_stacking ? v.array().mean() : 0.;
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
-  const t_real dl = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32});
-  const t_real dm = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32});
+  const t_real dl =
+      std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
+               2. / std::sqrt(number_of_samples) * L);
+  const t_real dm =
+      std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
+               2. / std::sqrt(number_of_samples) * M);
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
   PURIFY_MEDIUM_LOG("dl x dm : {} x {} ", dl, dm);
@@ -471,12 +475,15 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   t_real const v_mean = uvw_stacking ? v.array().mean() : 0.;
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
-  const t_int imsizex = std::pow(
-      2, std::ceil(std::log2(std::floor(
-             L / std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / Jw * 2})))));
-  const t_int imsizey = imsizex;
-  const t_real dl = L / imsizex;
+  const t_real M = L;
+  const t_real dl =
+      std::min(std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
+                        2. / std::sqrt(number_of_samples) * M),
+               std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
+                        2. / std::sqrt(number_of_samples) * L));
   const t_real dm = dl;
+  const t_int imsizex = std::floor(L / dl);
+  const t_int imsizey = std::floor(M / dm);
   const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);
   const t_real dv = widefield::dl2du(dm, imsizey, oversample_ratio);
   PURIFY_MEDIUM_LOG("dl x dm : {} x {} ", dl, dm);
@@ -565,15 +572,16 @@ base_plane_degrid_wproj_all_to_all_operator(
   t_real const v_mean = uvw_stacking ? v.array().mean() : 0.;
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
-  t_int const imsizex = comm.all_reduce<t_real>(
-      std::pow(
-          2,
-          std::ceil(std::log2(std::floor(
-              L / std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / Jw * 2}))))),
-      MPI_MAX);
-  const t_int imsizey = imsizex;
-  const t_real dl = L / imsizex;
-  const t_real dm = dl;
+  const t_real M = L;
+
+  const t_real dl =
+      std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
+               2. / std::sqrt(number_of_samples) * L);
+  const t_real dm =
+      std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
+               2. / std::sqrt(number_of_samples) * M);
+  const t_int imsizex = std::floor(L / dl);
+  const t_int imsizey = std::floor(M / dm);
   const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);
   const t_real dv = widefield::dl2du(dm, imsizey, oversample_ratio);
   PURIFY_MEDIUM_LOG("dl x dm : {} x {} ", dl, dm);
