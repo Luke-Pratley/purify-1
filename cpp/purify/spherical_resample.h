@@ -476,9 +476,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
 
   const t_real M = L;
   const t_real dl =
-      std::min(std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
+      std::min(std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 128}),
                         2. / std::sqrt(number_of_samples) * M),
-               std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
+               std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 128}),
                         2. / std::sqrt(number_of_samples) * L));
   const t_real dm = dl;
   const t_int imsizex = std::floor(L / dl);
