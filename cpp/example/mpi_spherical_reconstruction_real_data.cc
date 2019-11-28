@@ -158,12 +158,12 @@ int main(int nargs, char const **args) {
   auto const wavelets = factory::wavelet_operator_factory<Vector<t_complex>>(
       factory::distributed_wavelet_operator::mpi_sara, sara, imsizey, imsizex, sara_size);
 
-  auto const primaldual =
-      factory::primaldual_factory<sopt::algorithm::ImagingPrimalDual<t_complex>>(
-          factory::algo_distribution::mpi_serial, measurements_transform, wavelets, uv_data, sigma,
-          imsizey, imsizex, sara_size, 500, true, true, 1e-4, 1, op_norm);
+  auto const algo = factory::fb_factory<sopt::algorithm::ImagingForwardBackward<t_complex>>(
+      factory::algo_distribution::mpi_serial, measurements_transform, wavelets, uv_data, sigma,
+      sigma * sigma * 0.5, 0, imsizey, imsizex, sara_size, 500, true, true, false, 1e-4, 1e-4, 50,
+      op_norm);
   // primaldual->l1_proximal_weights(l1_weights);
-  auto const diagnostic = (*primaldual)();
+  auto const diagnostic = (*algo)();
 
   assert(diagnostic.x.size() == all_sky_image.size());
   Image<t_complex> image = Image<t_complex>::Map(diagnostic.x.data(), imsizex, imsizey);
