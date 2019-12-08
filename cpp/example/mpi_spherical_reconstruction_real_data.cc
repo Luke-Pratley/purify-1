@@ -39,13 +39,13 @@ int main(int nargs, char const **args) {
   const std::string &dirtyfile = "sphere_dirty.fits";
   const std::string &psffile = "sphere_psf.fits";
 
-  const t_real L = 1.5;
+  const t_real L = 1.999;
   const t_real max_w = 0.;  // lambda
   const t_real snr = 30;
 
   const t_real phi_0 = 0. * constant::pi / 180.;
   const t_real theta_0 = 90. * constant::pi / 180.;
-  const t_int max_ell = 2048;
+  const t_int max_ell = 4096;
 
   t_uint const imsizex = max_ell;
   t_uint const imsizey = max_ell;
@@ -60,22 +60,22 @@ int main(int nargs, char const **args) {
   const t_int Jw = 256;
   const t_real oversample_ratio_image_domain = 1;
   const t_real oversample_ratio = 2;
-  const bool uvw_stacking = false;
+  const bool uvw_stacking = true;
   const kernels::kernel kernel = kernels::kernel::kb;
   const operators::fftw_plan ft_plan = operators::fftw_plan::measure;
   utilities::vis_params uv_data;
   std::vector<t_int> image_index;
   std::vector<t_real> w_stacks;
-  const t_real alpha = 0. / 180. * constant::pi;
-  const t_real beta = -0. / 180. * constant::pi;
-  const t_real gamma = 0. / 180. * constant::pi;
+  t_real alpha = 0.;
+  t_real beta = 0.; 
+  t_real gamma = 0.;
   {
     uv_data =
         read_measurements::read_measurements(file_names, comm, distribute::plan::radial, true);
     t_int flag_size = 0;
     for (t_int i = 0; i < uv_data.size(); i++)
       if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) > 0)
-        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 500) flag_size++;
+        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 1000) flag_size++;
     Vector<t_real> u = Vector<t_real>::Zero(flag_size);
     Vector<t_real> v = Vector<t_real>::Zero(flag_size);
     Vector<t_real> w = Vector<t_real>::Zero(flag_size);
@@ -85,7 +85,7 @@ int main(int nargs, char const **args) {
     t_int count = 0;
     for (t_int i = 0; i < uv_data.size(); i++)
       if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) > 0)
-        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 500) {
+        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 1000) {
           u(count) = uv_data.u(i);
           v(count) = uv_data.v(i);
           w(count) = uv_data.w(i);
@@ -93,10 +93,48 @@ int main(int nargs, char const **args) {
           weights(count) = uv_data.weights(i);
           count++;
         }
-    uv_data.u = u;
-    uv_data.v = v;
-    uv_data.w = w;
-    uv_data.vis = vis;
+
+    Matrix<t_real> cov = Matrix<t_real>::Zero(3, 3);
+    cov(0, 0) = (u.array() - u.array().mean()).square().mean();
+    cov(0, 1) =
+        ((u.array() - u.array().mean()).array() * (v.array() - v.array().mean()).array()).mean();
+    cov(1, 0) = cov(0, 1);
+    cov(0, 2) =
+        ((u.array() - u.array().mean()).array() * (w.array() - w.array().mean()).array()).mean();
+    cov(2, 0) = cov(0, 2);
+    cov(1, 1) = (v.array() - v.array().mean()).square().mean();
+    cov(1, 2) =
+        ((w.array() - w.array().mean()).array() * (v.array() - v.array().mean()).array()).mean();
+    cov(2, 1) = cov(1, 2);
+    cov(2, 2) = (w.array() - w.array().mean()).square().mean();
+    Eigen::EigenSolver<Matrix<t_real>> es;
+    Matrix<t_complex> eigen_vectors = es.compute(cov).eigenvectors();
+    Vector<t_complex> eigen_vals = es.compute(cov).eigenvalues();
+    if (std::abs(eigen_vals(1)) < std::abs(eigen_vals(2))) {
+      const Vector<t_complex> buff = eigen_vectors.col(1);
+      eigen_vectors.col(1) = eigen_vectors.col(2);
+      eigen_vectors.col(2) = buff;
+      const t_complex b = eigen_vals(1);
+      eigen_vals(1) = eigen_vals(2);
+      eigen_vals(2) = b;
+    }
+    if (std::abs(eigen_vals(0)) < std::abs(eigen_vals(2))) {
+      const Vector<t_complex> buff = eigen_vectors.col(0);
+      eigen_vectors.col(0) = eigen_vectors.col(2);
+      eigen_vectors.col(2) = buff;
+      const t_complex b = eigen_vals(0);
+      eigen_vals(0) = eigen_vals(2);
+      eigen_vals(2) = b;
+    }
+    const auto euler_angles = spherical_resample::matrix_to_euler(eigen_vectors.real().inverse());
+    alpha = std::get<0>(euler_angles);
+    beta = std::get<1>(euler_angles);
+    gamma = std::get<2>(euler_angles);
+
+    uv_data.u = spherical_resample::calculate_rotated_l(u, v, w, alpha, beta, gamma);
+    uv_data.v = spherical_resample::calculate_rotated_m(u, v, w, alpha, beta, gamma);
+    uv_data.w = spherical_resample::calculate_rotated_n(u, v, w, alpha, beta, gamma);
+    uv_data.vis = vis.array() * Eigen::exp(-2 * constant::pi * t_complex(0, 1.) *  (w - uv_data.w).array());
     uv_data.weights = weights;
     uv_data = utilities::conjugate_w(uv_data);
     t_int const imsize = comm.all_reduce<t_real>(
@@ -124,7 +162,7 @@ int main(int nargs, char const **args) {
   };
   const auto phi = [num_phi, num_theta](const t_int k) -> t_real {
     return (utilities::ind2col(k, num_theta, num_phi)) * constant::pi / num_phi +
-           constant::pi * 0.5;
+            constant::pi * 0.5;
   };
 
   const t_real sigma = 320;
@@ -132,7 +170,7 @@ int main(int nargs, char const **args) {
   std::shared_ptr<sopt::LinearTransform<Vector<t_complex>>> const measurements_transform =
       spherical_resample::measurement_operator::planar_degrid_operator<
           Vector<t_complex>, std::function<t_real(t_int)>>(
-          comm, number_of_samples, phi_0, theta_0 - beta, phi, theta, uv_data, oversample_ratio,
+          comm, number_of_samples, phi_0, theta_0, phi, theta, uv_data, oversample_ratio,
           oversample_ratio_image_domain, kernel, Ju, Jv, Jl, Jm, ft_plan, uvw_stacking, L, L, 0.,
           0.);
   {
