@@ -286,6 +286,56 @@ TEST_CASE("Test FFT Correction") {
   }
 }
 
+TEST_CASE("on the fly resample calculations") {
+  const t_int Jl = 6;
+  const t_int total_samples = Jl * 2e5;
+  const t_int imsizex = 256;
+  const t_int imsizey = 256;
+  const auto dde = [](t_real, t_real) -> t_real { return 1.; };
+  Vector<t_real> l = Vector<t_real>::Random(10);
+  Vector<t_real> m = Vector<t_real>::Random(l.size());
+  const t_real dl = 0.25 * imsizex;
+  const t_real dm = 0.25 * imsizey;
+  auto const kernel = kernels::kernel_from_string.at("kb");
+  auto const lmkernels = purify::create_kernels(kernel, Jl, Jl, imsizey, imsizex, 1);
+  const std::function<t_real(t_real)>& kernell = std::get<0>(lmkernels);
+  const std::function<t_real(t_real)>& kernelm = std::get<1>(lmkernels);
+  const std::function<t_real(t_real)>& ftkernell = std::get<2>(lmkernels);
+  const std::function<t_real(t_real)>& ftkernelm = std::get<3>(lmkernels);
+  auto on_the_fly = spherical_resample::init_on_the_fly_resample_operator_2d<Vector<t_complex>>(
+      l, m, imsizey, imsizex, kernell, Jl, total_samples, dde, dl, dm);
+  const Sparse<t_complex> interrpolation_matrix = spherical_resample::init_resample_matrix_2d(
+      l, m, imsizey, imsizex, kernell, kernell, Jl, Jl, dde, dl, dm);
+  SECTION("degridding") {
+    const Vector<t_complex> input = Vector<t_complex>::Random(imsizex * imsizey);
+    const Vector<t_complex> expected_output = interrpolation_matrix * input;
+    Vector<t_complex> output;
+    std::get<1>(on_the_fly)(output, input);
+    CHECK(output.size() == expected_output.size());
+    CAPTURE(output.transpose());
+    CAPTURE(expected_output.transpose());
+    CAPTURE(l);
+    CAPTURE(m);
+    CAPTURE(dl);
+    CAPTURE(dm);
+    CHECK(output.isApprox(expected_output, 1e-5));
+  }
+  SECTION("gridding") {
+    const Vector<t_complex> input = Vector<t_complex>::Random(l.size());
+    const Vector<t_complex> expected_output = interrpolation_matrix.adjoint() * input;
+    Vector<t_complex> output;
+    std::get<0>(on_the_fly)(output, input);
+    CHECK(output.size() == expected_output.size());
+    CAPTURE(output.transpose());
+    CAPTURE(expected_output.transpose());
+    CAPTURE(l);
+    CAPTURE(m);
+    CAPTURE(dl);
+    CAPTURE(dm);
+    CHECK(output.isApprox(expected_output, 1e-5));
+  }
+}
+
 TEST_CASE("planar grid degrid") {
   const t_int Jl = 4;
   const t_int Jm = 4;

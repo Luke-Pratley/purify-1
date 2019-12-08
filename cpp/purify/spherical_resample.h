@@ -145,7 +145,103 @@ std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_resample_o
         output = interrpolation_matrix * input;
       });
 }
+//! returns an on the fly operator that will resample from a subset of coordinates
+template <class T>
+std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>>
+init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
+                                     const Vector<t_real> &m_compressed,
+                                     const t_int imsizey_upsampled, const t_int imsizex_upsampled,
+                                     const std::function<t_real(t_real)> &kernell, const t_int Jl,
+                                     const t_int total_samples,
+                                     const std::function<t_complex(t_real, t_real)> &dde,
+                                     const t_real dl_upsampled, const t_real dm_upsampled) {
+  const t_int rows = l_compressed.size();
+  const t_int cols = imsizex_upsampled * imsizey_upsampled;
+  if (l_compressed.size() != m_compressed.size())
+    throw std::runtime_error(
+        "Size of l and m vectors are not the same for creating resampling matrix.");
 
+  const t_int jl_max = std::min(Jl, imsizex_upsampled);
+  const t_int jm_max = std::min(Jl, imsizey_upsampled);
+  const std::shared_ptr<Vector<t_real>> l_ptr = std::make_shared<Vector<t_real>>(l_compressed);
+  const std::shared_ptr<Vector<t_real>> m_ptr = std::make_shared<Vector<t_real>>(m_compressed);
+  const auto samples = kernels::kernel_samples(
+      total_samples, [&](const t_real x) { return kernell(x * jl_max * 0.5); });
+  const auto degrid = [rows, cols, jl_max, jm_max, l_ptr, m_ptr, imsizex_upsampled,
+                       imsizey_upsampled, samples, dde, dl_upsampled, dm_upsampled,
+                       total_samples](T &output, const T &input) {
+    output = T::Zero(l_ptr->size());
+    assert(input.size() == imsizex * imsizey);
+#pragma omp parallel for
+    for (t_int k = 0; k < rows; ++k) {
+      assert(k < rows);
+      assert(k >= 0);
+      const t_real l_val = (*l_ptr)(k);
+      const t_real m_val = (*m_ptr)(k);
+      const t_complex dde_val = std::conj(dde(l_val * dl_upsampled, m_val * dm_upsampled));
+      for (t_int jl = 1; jl < jl_max + 1; ++jl) {
+        const t_real k_l = std::floor(l_val - jl_max * 0.5);
+        const t_int q = k_l + jl;
+        const t_real c_0 =
+            static_cast<t_int>(std::floor(2 * std::abs(l_val - q) * (total_samples - 1) / jl_max));
+        assert(c_0 >= 0);
+        assert(c_0 < total_samples);
+        const t_complex kernell_val = samples[c_0] * dde_val;
+        for (t_int jm = 1; jm < jm_max + 1; ++jm) {
+          const t_real k_m = std::floor(m_val - jm_max * 0.5);
+          const t_int p = k_m + jm;
+          const t_int index = utilities::sub2ind(std::floor((p + imsizey_upsampled * 0.5)),
+                                                 std::floor((q + imsizex_upsampled * 0.5)),
+                                                 imsizey_upsampled, imsizex_upsampled);
+          const t_real i_0 = static_cast<t_int>(
+              std::floor(2 * std::abs(m_val - p) * (total_samples - 1) / jm_max));
+          if ((cols > index) and (index >= 0))
+            output(k) += samples[i_0] * kernell_val * input(index);
+        }
+      }
+    }
+  };
+
+  const auto grid = [rows, cols, jl_max, jm_max, l_ptr, m_ptr, imsizex_upsampled, imsizey_upsampled,
+                     samples, dde, dl_upsampled, dm_upsampled,
+                     total_samples](T &output, const T &input) {
+    assert(input.size() == l_ptr->size());
+    output = T::Zero(cols);
+#pragma omp parallel for
+    for (t_int k = 0; k < rows; ++k) {
+      assert(k < rows);
+      assert(k >= 0);
+      const t_real l_val = (*l_ptr)(k);
+      const t_real m_val = (*m_ptr)(k);
+      const t_complex dde_val = dde(l_val * dl_upsampled, m_val * dm_upsampled);
+      for (t_int jl = 1; jl < jl_max + 1; ++jl) {
+        const t_real k_l = std::floor(l_val - jl_max * 0.5);
+        const t_int q = k_l + jl;
+        const t_real c_0 =
+            static_cast<t_int>(std::floor(2 * std::abs(l_val - q) * (total_samples - 1) / jl_max));
+        assert(c_0 >= 0);
+        assert(c_0 < total_samples);
+        const t_complex kernell_val = samples[c_0] * dde_val;
+        for (t_int jm = 1; jm < jm_max + 1; ++jm) {
+          const t_real k_m = std::floor(m_val - jm_max * 0.5);
+          const t_int p = k_m + jm;
+          const t_int index = utilities::sub2ind(std::floor((p + imsizey_upsampled * 0.5)),
+                                                 std::floor((q + imsizex_upsampled * 0.5)),
+                                                 imsizey_upsampled, imsizex_upsampled);
+          const t_real i_0 = static_cast<t_int>(
+              std::floor(2 * std::abs(m_val - p) * (total_samples - 1) / jm_max));
+          if ((cols > index) and (index >= 0)) {
+#pragma omp critical(resample_fly)
+            {
+              output(index) += samples[i_0] * kernell_val * input(k);
+            }
+          }
+        }
+      }
+    }
+  };
+  return std::make_tuple(grid, degrid);
+}  // namespace spherical_resample
 //! return operator that will resample between the sphere and the plane with masking
 template <class K, class T>
 std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_mask_and_resample_operator_2d(
@@ -161,6 +257,7 @@ std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_mask_and_r
     throw std::runtime_error("Tangent image size is not greater than zero.");
   if (number_of_samples <= 0)
     throw std::runtime_error("Number of samples on the sphere is not greater than zero.");
+  bool on_the_fly = true;
   // Find indicies for cutting to resample
   const t_int imsizex_upsampled = std::floor(imsizex * oversample_ratio_image_domain);
   const t_int imsizey_upsampled = std::floor(imsizey * oversample_ratio_image_domain);
@@ -177,10 +274,15 @@ std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_mask_and_r
   // Create operator to cutout region of sphere for resampling
   const auto cutting_operator = init_pop_indicies_operator<K>(indicies, number_of_samples);
   // Operator to perform resampling
-  const auto gridding_operator = init_resample_operator_2d<K>(
-      number_of_samples, l_compressed * coordinate_scaling, m_compressed * coordinate_scaling,
-      imsizey_upsampled, imsizex_upsampled, kernell, kernelm, Jl, Jm, dde, dl_upsampled,
-      dm_upsampled);
+  const auto gridding_operator =
+      (on_the_fly)
+          ? init_on_the_fly_resample_operator_2d<K>(l_compressed, m_compressed, imsizey_upsampled,
+                                                    imsizex_upsampled, kernell, Jl, Jl * 1e5, dde,
+                                                    dl_upsampled, dm_upsampled)
+          : init_resample_operator_2d<K>(number_of_samples, l_compressed * coordinate_scaling,
+                                         m_compressed * coordinate_scaling, imsizey_upsampled,
+                                         imsizex_upsampled, kernell, kernelm, Jl, Jm, dde,
+                                         dl_upsampled, dm_upsampled);
   // Combining them together
   auto direct =
       sopt::chained_operators<K>(std::get<0>(gridding_operator), std::get<0>(cutting_operator));
