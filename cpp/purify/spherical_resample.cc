@@ -28,6 +28,38 @@ t_real calculate_n(const t_real phi, const t_real theta, const t_real alpha, con
                                      calculate_n(theta), alpha, beta, gamma);
 }
 
+std::tuple<t_real, t_real, t_real> matrix_to_euler(const Matrix<t_real> &input) {
+  if(input.cols() !=3 or input.rows() !=3)
+    throw std::runtime_error("Rotation matrix is not 3x3");
+  const t_real det = input.determinant();
+  if (std::abs(det) - 1 > 1e-12)
+    throw std::runtime_error("Rotation matrix is not unitary. Something is wrong. det = " +
+                             std::to_string(det));
+  t_real alpha = 0;  // z0
+  t_real beta = 0;   // y
+  t_real gamma = 0;  // z1
+
+  if (input(2, 2) < 1) {
+    if (input(2, 2) > -1) {
+      beta = std::acos(input(2, 2));
+      alpha = std::atan2(input(1, 2), input(0, 2));
+      gamma = std::atan2(input(2, 1), -input(2, 0));
+    } else {
+      beta = constant::pi;
+      alpha = -std::atan2(input(1, 0), input(1, 1));
+      gamma = 0.;
+    }
+
+  } else {
+    beta = 0.;
+    alpha = std::atan2(input(1, 0), input(1, 1));
+    gamma = 0.;
+  }
+  PURIFY_LOW_LOG("Euler angles calculated to be (alpha = {}, beta = {}, gamma = {}) degrees in zyz convention",
+              alpha * 180. / constant::pi, beta * 180. / constant::pi, gamma * 180. / constant::pi);
+  return std::make_tuple(alpha, beta, gamma);
+}
+
 std::vector<t_int> generate_indicies(const Vector<t_real> &l, const Vector<t_real> &m,
                                      const Vector<t_real> &n, const t_real L, const t_real M) {
   if (l.size() != m.size()) throw std::runtime_error("number of l and m samples do not match.");
@@ -53,12 +85,14 @@ Vector<t_real> generate_mask(const Vector<t_real> &l, const Vector<t_real> &m,
   return mask;
 }
 
-Sparse<t_complex> init_resample_matrix_2d(
-    const Vector<t_real> &l, const Vector<t_real> &m, const t_int imsizey_upsampled,
-    const t_int imsizex_upsampled, const std::function<t_real(t_real)> kernell,
-    const std::function<t_real(t_real)> kernelm, const t_int Jl, const t_int Jm,
-    const std::function<t_complex(t_real, t_real)> &dde, const t_real dl_upsampled,
-    const t_real dm_upsampled) {
+Sparse<t_complex> init_resample_matrix_2d(const Vector<t_real> &l, const Vector<t_real> &m,
+                                          const t_int imsizey_upsampled,
+                                          const t_int imsizex_upsampled,
+                                          const std::function<t_real(t_real)> kernell,
+                                          const std::function<t_real(t_real)> kernelm,
+                                          const t_int Jl, const t_int Jm,
+                                          const std::function<t_complex(t_real, t_real)> &dde,
+                                          const t_real dl_upsampled, const t_real dm_upsampled) {
   const t_int rows = l.size();
   const t_int cols = imsizex_upsampled * imsizey_upsampled;
   if (l.size() != m.size())
@@ -76,8 +110,8 @@ Sparse<t_complex> init_resample_matrix_2d(
   for (t_int k = 0; k < rows; ++k) {
     for (t_int jl = 1; jl < jl_max + 1; ++jl) {
       for (t_int jm = 1; jm < jm_max + 1; ++jm) {
-        const t_real k_l = std::floor(l(k)  - jl_max * 0.5);
-        const t_real k_m = std::floor(m(k)  - jm_max * 0.5);
+        const t_real k_l = std::floor(l(k) - jl_max * 0.5);
+        const t_real k_m = std::floor(m(k) - jm_max * 0.5);
         const t_int q = k_l + jl;
         const t_int p = k_m + jm;
         const t_int index = utilities::sub2ind(std::floor((p + imsizey_upsampled * 0.5)),

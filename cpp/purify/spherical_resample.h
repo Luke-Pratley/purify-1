@@ -51,6 +51,8 @@ t_real calculate_m(const t_real phi, const t_real theta, const t_real alpha, con
 //! calculate the n in a rotated frame from euler angles in zyz
 t_real calculate_n(const t_real phi, const t_real theta, const t_real alpha, const t_real beta,
                    const t_real gamma);
+//! convert rotation matrix to Euler angles in zyz order
+std::tuple<t_real, t_real, t_real> matrix_to_euler(const Matrix<t_real> &input);
 
 //! generate indicies that overlap with imaging field of view for resampling
 std::vector<t_int> generate_indicies(const Vector<t_real> &l, const Vector<t_real> &m,
