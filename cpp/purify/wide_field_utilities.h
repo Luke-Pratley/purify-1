@@ -64,7 +64,7 @@ Matrix<t_complex> generate_dde(const DDE &dde, const t_real dl, const t_real dm,
 template <class DDE>
 Matrix<t_complex> generate_chirp(const DDE &dde, const t_real w_rate, const t_real dl,
                                  const t_real dm, const t_uint x_size, const t_uint y_size,
-                                 const t_real stop_gap = 0.1) {
+                                 const t_real stop_gap = 0.001) {
   const t_complex I(0, 1);
   const auto chirp = [=](const t_real y, const t_real x) {
     return dde(y, x) *
