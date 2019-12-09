@@ -53,6 +53,17 @@ t_real calculate_n(const t_real phi, const t_real theta, const t_real alpha, con
                    const t_real gamma);
 //! convert rotation matrix to Euler angles in zyz order
 std::tuple<t_real, t_real, t_real> matrix_to_euler(const Matrix<t_real> &input);
+//! find prefered rotation to minimize w values
+std::tuple<t_real, t_real, t_real> find_prefered_direction(const Vector<t_real> &u,
+                                                           const Vector<t_real> &v,
+                                                           const Vector<t_real> &w);
+#ifdef PURIFY_MPI
+//! find prefered rotation to minimize w values with MPI
+std::tuple<t_real, t_real, t_real> find_prefered_direction(const Vector<t_real> &u,
+                                                           const Vector<t_real> &v,
+                                                           const Vector<t_real> &w,
+                                                           const sopt::mpi::Communicator &comm);
+#endif
 
 //! generate indicies that overlap with imaging field of view for resampling
 std::vector<t_int> generate_indicies(const Vector<t_real> &l, const Vector<t_real> &m,
@@ -478,12 +489,10 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   t_real const v_mean = uvw_stacking ? v.array().mean() : 0.;
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
-  const t_real dl =
-      std::max(std::min({0.5 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
-               1. / std::sqrt(number_of_samples) * L);
-  const t_real dm =
-      std::max(std::min({0.5 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
-               1. / std::sqrt(number_of_samples) * M);
+  const t_real dl = std::max(std::min({0.5 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
+                             1. / std::sqrt(number_of_samples) * L);
+  const t_real dm = std::max(std::min({0.5 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
+                             1. / std::sqrt(number_of_samples) * M);
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
   PURIFY_MEDIUM_LOG("dl x dm : {} x {} ", dl, dm);
@@ -549,7 +558,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   if (on_the_fly)
     std::tie(directG, indirectG) = purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
         (u.array() - u_mean) / du, (v.array() - v_mean) / dv, weights, imsizey, imsizex,
-        oversample_ratio, kernelu, kernelv, Ju, Jv, 4e5);
+        oversample_ratio, kernelu, kernelv, Ju, Jv, Ju * 1e5);
   else
     std::tie(directG, indirectG) = purify::operators::init_gridding_matrix_2d<T>(
         (u.array() - u_mean) / du, (v.array() - v_mean) / dv, weights, imsizey, imsizex,
@@ -677,12 +686,10 @@ base_plane_degrid_wproj_all_to_all_operator(
 
   const t_real M = L;
 
-  const t_real dl =
-      std::max(std::min({0.5 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
-               1. / std::sqrt(number_of_samples) * L);
-  const t_real dm =
-      std::max(std::min({0.5 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
-               1. / std::sqrt(number_of_samples) * M);
+  const t_real dl = std::max(std::min({0.5 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
+                             1. / std::sqrt(number_of_samples) * L);
+  const t_real dm = std::max(std::min({0.5 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
+                             1. / std::sqrt(number_of_samples) * M);
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
   const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);

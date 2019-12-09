@@ -64,6 +64,11 @@ w_stacking_with_all_to_all(utilities::vis_params const &params, const t_real du,
                            sopt::mpi::Communicator const &comm, const t_int iters,
                            const t_real fill_relaxation, const std::function<t_real(t_real)> &cost,
                            const t_real k_means_rel_diff = 1e-5);
+template <class T>
+//! \breif take input return mean using all sum all
+typename T::Scalar mpi_mean(const T &input, const sopt::mpi::Communicator &comm) {
+  return comm.all_sum_all(input.sum()) / comm.all_sum_all(input.size());
+}
 #endif
 //! \brief Calculate step size using MPI (does not include factor of 1e-3)
 //! \param[in] vis: Vector of measurement data

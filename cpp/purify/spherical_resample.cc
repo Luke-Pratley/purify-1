@@ -28,8 +28,88 @@ t_real calculate_n(const t_real phi, const t_real theta, const t_real alpha, con
                                      calculate_n(theta), alpha, beta, gamma);
 }
 
+std::tuple<t_real, t_real, t_real> find_prefered_direction(const Vector<t_real> &u,
+                                                           const Vector<t_real> &v,
+                                                           const Vector<t_real> &w) {
+  Matrix<t_real> cov = Matrix<t_real>::Zero(3, 3);
+  cov(0, 0) = (u.array() - u.mean()).square().mean();
+  cov(0, 1) = ((u.array() - u.mean()).array() * (v.array() - v.mean())).mean();
+  cov(1, 0) = cov(0, 1);
+  cov(0, 2) = ((u.array() - u.mean()).array() * (w.array() - w.mean())).mean();
+  cov(2, 0) = cov(0, 2);
+  cov(1, 1) = (v.array() - v.mean()).square().mean();
+  cov(1, 2) = ((v.array() - v.mean()).array() * (w.array() - w.mean())).mean();
+  cov(2, 1) = cov(1, 2);
+  cov(2, 2) = (w.array() - w.mean()).square().mean();
+  Eigen::EigenSolver<Matrix<t_real>> es;
+  Matrix<t_complex> eigen_vectors = es.compute(cov).eigenvectors();
+  Vector<t_complex> eigen_vals = es.compute(cov).eigenvalues();
+  if (std::abs(eigen_vals(1)) < std::abs(eigen_vals(2))) {
+    const Vector<t_complex> buff = eigen_vectors.col(1);
+    eigen_vectors.col(1) = eigen_vectors.col(2);
+    eigen_vectors.col(2) = buff;
+    const t_complex b = eigen_vals(1);
+    eigen_vals(1) = eigen_vals(2);
+    eigen_vals(2) = b;
+  }
+  if (std::abs(eigen_vals(0)) < std::abs(eigen_vals(2))) {
+    const Vector<t_complex> buff = eigen_vectors.col(0);
+    eigen_vectors.col(0) = eigen_vectors.col(2);
+    eigen_vectors.col(2) = buff;
+    const t_complex b = eigen_vals(0);
+    eigen_vals(0) = eigen_vals(2);
+    eigen_vals(2) = b;
+  }
+  return spherical_resample::matrix_to_euler(eigen_vectors.real().inverse());
+}
+
+#ifdef PURIFY_MPI
+std::tuple<t_real, t_real, t_real> find_prefered_direction(const Vector<t_real> &u,
+                                                           const Vector<t_real> &v,
+                                                           const Vector<t_real> &w,
+                                                           const sopt::mpi::Communicator &comm) {
+  Matrix<t_real> cov = Matrix<t_real>::Zero(3, 3);
+  cov(0, 0) = utilities::mpi_mean((u.array() - utilities::mpi_mean(u, comm)).square(), comm);
+  cov(0, 1) = utilities::mpi_mean((u.array() - utilities::mpi_mean(u, comm)).array() *
+                                      (v.array() - utilities::mpi_mean(v, comm)).array(),
+                                  comm);
+  cov(1, 0) = cov(0, 1);
+  cov(0, 2) = utilities::mpi_mean((u.array() - utilities::mpi_mean(u, comm)).array() *
+                                      (w.array() - utilities::mpi_mean(w, comm)).array(),
+                                  comm);
+
+  cov(2, 0) = cov(0, 2);
+  cov(1, 1) = utilities::mpi_mean((v.array() - utilities::mpi_mean(v, comm)).square(), comm);
+  cov(1, 2) = utilities::mpi_mean((w.array() - utilities::mpi_mean(w, comm)).array() *
+                                      (v.array() - utilities::mpi_mean(v, comm)).array(),
+                                  comm);
+  cov(2, 1) = cov(1, 2);
+  cov(2, 2) = utilities::mpi_mean((w.array() - utilities::mpi_mean(w, comm)).square(), comm);
+  Eigen::EigenSolver<Matrix<t_real>> es;
+  Matrix<t_complex> eigen_vectors = es.compute(cov).eigenvectors();
+  Vector<t_complex> eigen_vals = es.compute(cov).eigenvalues();
+  if (std::abs(eigen_vals(1)) < std::abs(eigen_vals(2))) {
+    const Vector<t_complex> buff = eigen_vectors.col(1);
+    eigen_vectors.col(1) = eigen_vectors.col(2);
+    eigen_vectors.col(2) = buff;
+    const t_complex b = eigen_vals(1);
+    eigen_vals(1) = eigen_vals(2);
+    eigen_vals(2) = b;
+  }
+  if (std::abs(eigen_vals(0)) < std::abs(eigen_vals(2))) {
+    const Vector<t_complex> buff = eigen_vectors.col(0);
+    eigen_vectors.col(0) = eigen_vectors.col(2);
+    eigen_vectors.col(2) = buff;
+    const t_complex b = eigen_vals(0);
+    eigen_vals(0) = eigen_vals(2);
+    eigen_vals(2) = b;
+  }
+  return spherical_resample::matrix_to_euler(eigen_vectors.real().inverse());
+}
+#endif
+
 std::tuple<t_real, t_real, t_real> matrix_to_euler(const Matrix<t_real> &input) {
-  if(input.cols() !=3 or input.rows() !=3)
+  if (input.cols() != 3 or input.rows() != 3)
     throw std::runtime_error("Rotation matrix is not 3x3");
   const t_real det = input.determinant();
   if (std::abs(det) - 1 > 1e-12)
@@ -55,8 +135,9 @@ std::tuple<t_real, t_real, t_real> matrix_to_euler(const Matrix<t_real> &input) 
     alpha = std::atan2(input(1, 0), input(1, 1));
     gamma = 0.;
   }
-  PURIFY_LOW_LOG("Euler angles calculated to be (alpha = {}, beta = {}, gamma = {}) degrees in zyz convention",
-              alpha * 180. / constant::pi, beta * 180. / constant::pi, gamma * 180. / constant::pi);
+  PURIFY_LOW_LOG(
+      "Euler angles calculated to be (alpha = {}, beta = {}, gamma = {}) degrees in zyz convention",
+      alpha * 180. / constant::pi, beta * 180. / constant::pi, gamma * 180. / constant::pi);
   return std::make_tuple(alpha, beta, gamma);
 }
 
