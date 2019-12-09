@@ -94,39 +94,8 @@ int main(int nargs, char const **args) {
           count++;
         }
 
-    Matrix<t_real> cov = Matrix<t_real>::Zero(3, 3);
-    cov(0, 0) = (u.array() - u.array().mean()).square().mean();
-    cov(0, 1) =
-        ((u.array() - u.array().mean()).array() * (v.array() - v.array().mean()).array()).mean();
-    cov(1, 0) = cov(0, 1);
-    cov(0, 2) =
-        ((u.array() - u.array().mean()).array() * (w.array() - w.array().mean()).array()).mean();
-    cov(2, 0) = cov(0, 2);
-    cov(1, 1) = (v.array() - v.array().mean()).square().mean();
-    cov(1, 2) =
-        ((w.array() - w.array().mean()).array() * (v.array() - v.array().mean()).array()).mean();
-    cov(2, 1) = cov(1, 2);
-    cov(2, 2) = (w.array() - w.array().mean()).square().mean();
-    Eigen::EigenSolver<Matrix<t_real>> es;
-    Matrix<t_complex> eigen_vectors = es.compute(cov).eigenvectors();
-    Vector<t_complex> eigen_vals = es.compute(cov).eigenvalues();
-    if (std::abs(eigen_vals(1)) < std::abs(eigen_vals(2))) {
-      const Vector<t_complex> buff = eigen_vectors.col(1);
-      eigen_vectors.col(1) = eigen_vectors.col(2);
-      eigen_vectors.col(2) = buff;
-      const t_complex b = eigen_vals(1);
-      eigen_vals(1) = eigen_vals(2);
-      eigen_vals(2) = b;
-    }
-    if (std::abs(eigen_vals(0)) < std::abs(eigen_vals(2))) {
-      const Vector<t_complex> buff = eigen_vectors.col(0);
-      eigen_vectors.col(0) = eigen_vectors.col(2);
-      eigen_vectors.col(2) = buff;
-      const t_complex b = eigen_vals(0);
-      eigen_vals(0) = eigen_vals(2);
-      eigen_vals(2) = b;
-    }
-    const auto euler_angles = spherical_resample::matrix_to_euler(eigen_vectors.real().inverse());
+    uv_data = utilities::conjugate_w(uv_data);
+    const auto euler_angles = spherical_resample::find_prefered_direction(u, v, w, comm);
     alpha = std::get<0>(euler_angles);
     beta = std::get<1>(euler_angles);
     gamma = std::get<2>(euler_angles);
@@ -134,22 +103,10 @@ int main(int nargs, char const **args) {
     uv_data.u = spherical_resample::calculate_rotated_l(u, v, w, alpha, beta, gamma);
     uv_data.v = spherical_resample::calculate_rotated_m(u, v, w, alpha, beta, gamma);
     uv_data.w = spherical_resample::calculate_rotated_n(u, v, w, alpha, beta, gamma);
-    uv_data.vis = vis.array() * Eigen::exp(-2 * constant::pi * t_complex(0, 1.) *  (w - uv_data.w).array());
+    uv_data.vis =
+        vis.array() * Eigen::exp(-2 * constant::pi * t_complex(0, 1.) * (w - uv_data.w).array());
     uv_data.weights = weights;
-    uv_data = utilities::conjugate_w(uv_data);
-    t_int const imsize = comm.all_reduce<t_real>(
-        std::pow(
-            2,
-            std::ceil(std::log2(std::floor(
-                L / std::min({0.25 / ((uv_data.u.array() - uv_data.u.mean()).cwiseAbs().maxCoeff()),
-                              L / Jw * 2}))))),
-        MPI_MAX);
-
-    const t_real dl = L / imsize;
-
-    const t_real du = widefield::dl2du(dl, imsize, oversample_ratio);
-    uv_data = utilities::w_stacking(
-        uv_data, comm, 100, [](t_real x) { return x * x; }, 1e-3);
+    uv_data = utilities::uv_stacking(uv_data, comm);
     const t_real norm = std::sqrt(
         comm.all_sum_all((uv_data.weights.real().array() * uv_data.weights.real().array()).sum()) /
         comm.all_sum_all(uv_data.size()));
@@ -162,7 +119,7 @@ int main(int nargs, char const **args) {
   };
   const auto phi = [num_phi, num_theta](const t_int k) -> t_real {
     return (utilities::ind2col(k, num_theta, num_phi)) * constant::pi / num_phi +
-            constant::pi * 0.5;
+           constant::pi * 0.5;
   };
 
   const t_real sigma = 320;
