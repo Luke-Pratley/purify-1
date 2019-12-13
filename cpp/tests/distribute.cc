@@ -54,30 +54,57 @@ TEST_CASE("Distribute") {
   }
 }
 TEST_CASE("uv_stacking") {
-  const t_int groups = 4;
-  const t_int M = 10;
-  Vector<t_real> u = Vector<t_real>::Ones(M * groups);
-  Vector<t_real> v = Vector<t_real>::Ones(M * groups);
-  CHECK(u.size() == 40);
-  u.segment(0, M) *= -1;
-  v.segment(0, M) *= -1;
+  SECTION("4 groups") {
+    const t_int groups = 4;
+    const t_int M = 10;
+    Vector<t_real> u = Vector<t_real>::Ones(M * groups);
+    Vector<t_real> v = Vector<t_real>::Ones(M * groups);
+    CHECK(u.size() == 40);
+    u.segment(0, M) *= -1;
+    v.segment(0, M) *= -1;
 
-  u.segment(M, M) *= -1;
-  v.segment(M, M) *= 1;
+    u.segment(M, M) *= -1;
+    v.segment(M, M) *= 1;
 
-  u.segment(2 * M, M) *= 1;
-  v.segment(2 * M, M) *= -1;
+    u.segment(2 * M, M) *= 1;
+    v.segment(2 * M, M) *= -1;
 
-  u.segment(3 * M, M) *= 1;
-  v.segment(3 * M, M) *= 1;
-  const auto order = distribute::uv_distribution(u, v, groups);
-  const Vector<t_int> result = Vector<t_int>::Map(order.data(), order.size());
-  CAPTURE(result.segment(0, M))
-  CAPTURE(result.segment(1 * M, M))
-  CAPTURE(result.segment(2 * M, M))
-  CAPTURE(result.segment(3 * M, M))
-  CHECK(result.segment(0, M).isApprox(Vector<t_int>::Constant(M, 0)));
-  CHECK(result.segment(M, M).isApprox(Vector<t_int>::Constant(M, 1)));
-  CHECK(result.segment(2 * M, M).isApprox(Vector<t_int>::Constant(M, 2)));
-  CHECK(result.segment(3 * M, M).isApprox(Vector<t_int>::Constant(M, 3)));
+    u.segment(3 * M, M) *= 1;
+    v.segment(3 * M, M) *= 1;
+    const auto order = distribute::uv_distribution(u, v, groups);
+    const Vector<t_int> result = Vector<t_int>::Map(order.data(), order.size());
+    CAPTURE(result.segment(0, M))
+    CAPTURE(result.segment(1 * M, M))
+    CAPTURE(result.segment(2 * M, M))
+    CAPTURE(result.segment(3 * M, M))
+    CHECK(result.segment(0, M).isApprox(Vector<t_int>::Constant(M, 0)));
+    CHECK(result.segment(M, M).isApprox(Vector<t_int>::Constant(M, 1)));
+    CHECK(result.segment(2 * M, M).isApprox(Vector<t_int>::Constant(M, 2)));
+    CHECK(result.segment(3 * M, M).isApprox(Vector<t_int>::Constant(M, 3)));
+  }
+  SECTION("16 groups") {
+    const t_int groups = 16;
+    const t_int M = 10;
+    Vector<t_real> u = Vector<t_real>::Ones(M * groups);
+    Vector<t_real> v = Vector<t_real>::Ones(M * groups);
+    CHECK(u.size() == 160);
+    const t_int u_g = std::sqrt(groups);
+    const t_int v_g = std::sqrt(groups);
+    for (t_int i = 0; i < u_g; i++)
+      for (t_int j = 0; j < v_g; j++) {
+        const t_int index = i * u_g + j;
+        u.segment(index * M, M) *= i;
+        v.segment(index * M, M) *= j;
+      }
+
+    const auto order = distribute::uv_distribution(u, v, groups);
+    const Vector<t_int> result = Vector<t_int>::Map(order.data(), order.size());
+    CHECK(result.size() == groups);
+    for (t_int i = 0; i < u_g; i++)
+      for (t_int j = 0; j < v_g; j++) {
+        const t_int index = i * u_g + j;
+        CAPTURE(result.segment(index * M, M))
+        CHECK(result.segment(index * M, M).isApprox(Vector<t_int>::Constant(M, index)));
+      }
+  }
 }
