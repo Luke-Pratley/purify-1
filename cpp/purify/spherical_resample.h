@@ -489,13 +489,18 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   t_real const v_mean = uvw_stacking ? v.array().mean() : 0.;
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
-  const t_real dl = std::max(std::min({0.5 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
-                             1. / std::sqrt(number_of_samples) * L);
-  const t_real dm = std::max(std::min({0.5 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
-                             1. / std::sqrt(number_of_samples) * M);
+  const t_real dl =
+      std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 512}),
+               0.25 / std::sqrt(number_of_samples) * L);
+  const t_real dm =
+      std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 512}),
+               0.25 / std::sqrt(number_of_samples) * M);
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
+  const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);
+  const t_real dv = widefield::dl2du(dm, imsizey, oversample_ratio);
   PURIFY_MEDIUM_LOG("dl x dm : {} x {} ", dl, dm);
+  PURIFY_MEDIUM_LOG("du x dv : {} x {} ", du, dv);
   PURIFY_MEDIUM_LOG("FoV (width, height): {} x {} (L x M)", imsizex * dl, imsizey * dm);
   PURIFY_MEDIUM_LOG("FoV (width, height): {} x {} (deg x deg)",
                     std::asin(imsizex * dl / 2.) * 2. * 180. / constant::pi,
@@ -505,11 +510,11 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
                     std::asin(beam_m / 2. / 2) * 2. * 180. / constant::pi);
   PURIFY_MEDIUM_LOG("Number of visibilities: {}", u.size());
   PURIFY_MEDIUM_LOG("Maximum u value is {} lambda, sphere needs to be sampled at dl = {}.",
-                    u.cwiseAbs().maxCoeff(), std::min(0.5 / u.cwiseAbs().maxCoeff(), 1.));
+                    u.cwiseAbs().maxCoeff(), std::min(0.25 / u.cwiseAbs().maxCoeff(), 1.));
   PURIFY_MEDIUM_LOG("Maximum v value is {} lambda, sphere needs to be sampled at dm = {}.",
-                    v.cwiseAbs().maxCoeff(), std::min(0.5 / v.cwiseAbs().maxCoeff(), 1.));
+                    v.cwiseAbs().maxCoeff(), std::min(0.25 / v.cwiseAbs().maxCoeff(), 1.));
   PURIFY_MEDIUM_LOG("Maximum w value is {} lambda, sphere needs to be sampled at dn = {}.",
-                    w.cwiseAbs().maxCoeff(), std::min(0.5 / w.cwiseAbs().maxCoeff(), 1.));
+                    w.cwiseAbs().maxCoeff(), std::min(0.25 / w.cwiseAbs().maxCoeff(), 1.));
 
   auto const uvkernels = purify::create_kernels(kernel, Ju, Jv, imsizey, imsizex, oversample_ratio);
   const std::function<t_real(t_real)> &kernelu = std::get<0>(uvkernels);
@@ -531,9 +536,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
     return std::exp(-2 * constant::pi * I *
                     (u_mean * l + v_mean * m + w_mean * (std::sqrt(1. - l * l - m * m) - 1.))) /
            std::sqrt(1. - l * l - m * m) * (((l * l + m * m) < 1.) ? 1. : 0.) *
-           boost::math::sinc_pi(beam_l * l * constant::pi) *
-           boost::math::sinc_pi(beam_m * m * constant::pi) * std::sqrt(imsizex * imsizey) *
-           oversample_ratio * oversample_ratio_image_domain;
+           std::pow(boost::math::sinc_pi(beam_l * l * constant::pi), 2) *
+           std::pow(boost::math::sinc_pi(beam_m * m * constant::pi), 2) *
+           std::sqrt(imsizex * imsizey) * oversample_ratio * oversample_ratio_image_domain;
   };
 
   PURIFY_LOW_LOG("Constructing Spherical Resampling Operator: P");
@@ -552,8 +557,6 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
     PURIFY_MEDIUM_LOG("Mean, w: {}, +/- {}", w_mean, (w.maxCoeff() - w.minCoeff()) * 0.5);
   }
   PURIFY_LOW_LOG("Constructing Weighting and Gridding Operators: WG");
-  const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);
-  const t_real dv = widefield::dl2du(dm, imsizey, oversample_ratio);
   sopt::OperatorFunction<T> directG, indirectG;
   if (on_the_fly)
     std::tie(directG, indirectG) = purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
@@ -588,11 +591,13 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
   const t_real M = L;
-  const t_real dl =
-      std::min(std::max(std::min({0.5 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 128}),
-                        1. / std::sqrt(number_of_samples) * M),
-               std::max(std::min({0.5 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 128}),
-                        1. / std::sqrt(number_of_samples) * L));
+  const t_real dl_temp =
+      std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 512}),
+               0.25 / std::sqrt(number_of_samples) * L);
+  const t_real dm_temp =
+      std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 512}),
+               0.25 / std::sqrt(number_of_samples) * M);
+  const t_real dl = std::min(dl_temp, dm_temp);
   const t_real dm = dl;
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
@@ -639,8 +644,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
                     (u_mean * l + v_mean * m + w_mean * (std::sqrt(1. - l * l - m * m) - 1.))) /
            std::sqrt(1. - l * l - m * m) * (((l * l + m * m) < 1.) ? 1. : 0.) *
            std::sqrt(imsizex * imsizey) * oversample_ratio * oversample_ratio_image_domain *
-           boost::math::sinc_pi(beam_l * l * constant::pi) *
-           boost::math::sinc_pi(beam_m * m * constant::pi);
+           std::pow(boost::math::sinc_pi(beam_l * l * constant::pi), 2) *
+           std::pow(boost::math::sinc_pi(beam_m * m * constant::pi), 2);
   };
 
   PURIFY_LOW_LOG("Constructing Spherical Resampling Operator: P");
@@ -685,11 +690,14 @@ base_plane_degrid_wproj_all_to_all_operator(
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
   const t_real M = L;
-
-  const t_real dl = std::max(std::min({0.5 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 32}),
-                             1. / std::sqrt(number_of_samples) * L);
-  const t_real dm = std::max(std::min({0.5 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 32}),
-                             1. / std::sqrt(number_of_samples) * M);
+  const t_real dl_temp =
+      std::max(std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 512}),
+               1 / std::sqrt(number_of_samples) * L);
+  const t_real dm_temp =
+      std::max(std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 512}),
+               1 / std::sqrt(number_of_samples) * M);
+  const t_real dl = std::max(dl_temp, dm_temp);
+  const t_real dm = dl;
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
   const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);
@@ -705,11 +713,11 @@ base_plane_degrid_wproj_all_to_all_operator(
                     std::asin(beam_m / 2.) * 2. * 180. / constant::pi);
   PURIFY_MEDIUM_LOG("Number of visibilities: {}", u.size());
   PURIFY_MEDIUM_LOG("Maximum u value is {} lambda, sphere needs to be sampled at dl = {}.",
-                    u.cwiseAbs().maxCoeff(), std::min(0.5 / u.cwiseAbs().maxCoeff(), 1.));
+                    u.cwiseAbs().maxCoeff(), std::min(0.25 / u.cwiseAbs().maxCoeff(), 1.));
   PURIFY_MEDIUM_LOG("Maximum v value is {} lambda, sphere needs to be sampled at dm = {}.",
-                    v.cwiseAbs().maxCoeff(), std::min(0.5 / v.cwiseAbs().maxCoeff(), 1.));
+                    v.cwiseAbs().maxCoeff(), std::min(0.25 / v.cwiseAbs().maxCoeff(), 1.));
   PURIFY_MEDIUM_LOG("Maximum w value is {} lambda, sphere needs to be sampled at dn = {}.",
-                    w.cwiseAbs().maxCoeff(), std::min(0.5 / w.cwiseAbs().maxCoeff(), 1.));
+                    w.cwiseAbs().maxCoeff(), std::min(0.25 / w.cwiseAbs().maxCoeff(), 1.));
   if (uvw_stacking) {
     PURIFY_MEDIUM_LOG("Mean, u: {}, +/- {}", u_mean, (u.maxCoeff() - u.minCoeff()) * 0.5);
     PURIFY_MEDIUM_LOG("Mean, v: {}, +/- {}", v_mean, (v.maxCoeff() - v.minCoeff()) * 0.5);
