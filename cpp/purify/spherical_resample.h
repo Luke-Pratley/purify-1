@@ -275,9 +275,9 @@ std::tuple<sopt::OperatorFunction<K>, sopt::OperatorFunction<K>> init_mask_and_r
   const t_real dl_upsampled = dl / oversample_ratio_image_domain;
   const t_real dm_upsampled = dm / oversample_ratio_image_domain;
 
-  const auto lm_with_mask =
-      calculate_compressed_lm<T>(number_of_samples, phi_0, theta_0, phi, theta, imsizey_upsampled,
-                                 imsizex_upsampled, dl_upsampled, dm_upsampled);
+  const auto lm_with_mask = calculate_compressed_lm<T>(
+      number_of_samples, phi_0, theta_0, phi, theta, imsizey_upsampled - Jm, imsizex_upsampled - Jl,
+      dl_upsampled, dm_upsampled);
   const Vector<t_real> &l_compressed = std::get<0>(lm_with_mask);
   const Vector<t_real> &m_compressed = std::get<1>(lm_with_mask);
   const std::vector<t_int> &indicies = std::get<2>(lm_with_mask);
