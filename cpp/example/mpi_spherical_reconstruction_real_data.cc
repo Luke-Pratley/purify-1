@@ -39,7 +39,7 @@ int main(int nargs, char const **args) {
   const std::string &dirtyfile = "sphere_dirty.fits";
   const std::string &psffile = "sphere_psf.fits";
 
-  const t_real L = 1.999;
+  const t_real L = 1.5;
   const t_real max_w = 0.;  // lambda
   const t_real snr = 30;
 
@@ -67,7 +67,7 @@ int main(int nargs, char const **args) {
   std::vector<t_int> image_index;
   std::vector<t_real> w_stacks;
   t_real alpha = 0.;
-  t_real beta = 0.; 
+  t_real beta = 0.;
   t_real gamma = 0.;
   {
     uv_data =
@@ -75,7 +75,7 @@ int main(int nargs, char const **args) {
     t_int flag_size = 0;
     for (t_int i = 0; i < uv_data.size(); i++)
       if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) > 0)
-        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 1000) flag_size++;
+        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 400) flag_size++;
     Vector<t_real> u = Vector<t_real>::Zero(flag_size);
     Vector<t_real> v = Vector<t_real>::Zero(flag_size);
     Vector<t_real> w = Vector<t_real>::Zero(flag_size);
@@ -85,7 +85,7 @@ int main(int nargs, char const **args) {
     t_int count = 0;
     for (t_int i = 0; i < uv_data.size(); i++)
       if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) > 0)
-        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 1000) {
+        if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2)) < 400) {
           u(count) = uv_data.u(i);
           v(count) = uv_data.v(i);
           w(count) = uv_data.w(i);
@@ -94,7 +94,6 @@ int main(int nargs, char const **args) {
           count++;
         }
 
-    uv_data = utilities::conjugate_w(uv_data);
     const auto euler_angles = spherical_resample::find_prefered_direction(u, v, w, comm);
     alpha = std::get<0>(euler_angles);
     beta = std::get<1>(euler_angles);
@@ -113,6 +112,8 @@ int main(int nargs, char const **args) {
     // normalise weights
     uv_data.weights = uv_data.weights / norm;
     uv_data.vis = uv_data.vis.array() * uv_data.weights.array();
+    uv_data = utilities::conjugate_w(uv_data);
+    PURIFY_DEBUG("Using {} visibilities after flaggging long baselines.", uv_data.size());
   }
   const auto theta = [num_theta, num_phi](const t_int k) -> t_real {
     return (utilities::ind2row(k, num_theta, num_phi)) * constant::pi / num_theta;
