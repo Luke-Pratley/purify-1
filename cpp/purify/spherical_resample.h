@@ -178,8 +178,17 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
   const std::shared_ptr<Vector<t_real>> m_ptr = std::make_shared<Vector<t_real>>(m_compressed);
   const auto samples = kernels::kernel_samples(
       total_samples, [&](const t_real x) { return kernell(x * jl_max * 0.5); });
-  const auto degrid = [rows, cols, jl_max, jm_max, l_ptr, m_ptr, imsizex_upsampled,
-                       imsizey_upsampled, samples, dde, dl_upsampled, dm_upsampled,
+  const std::shared_ptr<Vector<t_complex>> dde_ptr =
+      std::make_shared<Vector<t_complex>>(Vector<t_complex>::Zero(l_compressed.size()));
+  for (t_int k = 0; k < rows; ++k) {
+    assert(k < rows);
+    assert(k >= 0);
+    const t_real l_val = (*l_ptr)(k);
+    const t_real m_val = (*m_ptr)(k);
+    (*dde_ptr)(k) = dde(l_val * dl_upsampled, m_val * dm_upsampled);
+  }
+  const auto degrid = [rows, cols, jl_max, jm_max, dde_ptr, l_ptr, m_ptr, imsizex_upsampled,
+                       imsizey_upsampled, samples, dl_upsampled, dm_upsampled,
                        total_samples](T &output, const T &input) {
     output = T::Zero(l_ptr->size());
     assert(input.size() == imsizex * imsizey);
@@ -189,7 +198,7 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
       assert(k >= 0);
       const t_real l_val = (*l_ptr)(k);
       const t_real m_val = (*m_ptr)(k);
-      const t_complex dde_val = std::conj(dde(l_val * dl_upsampled, m_val * dm_upsampled));
+      const t_complex dde_val = std::conj((*dde_ptr)(k));
       for (t_int jl = 1; jl < jl_max + 1; ++jl) {
         const t_real k_l = std::floor(l_val - jl_max * 0.5);
         const t_int q = k_l + jl;
@@ -213,8 +222,8 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
     }
   };
 
-  const auto grid = [rows, cols, jl_max, jm_max, l_ptr, m_ptr, imsizex_upsampled, imsizey_upsampled,
-                     samples, dde, dl_upsampled, dm_upsampled,
+  const auto grid = [rows, cols, jl_max, jm_max, dde_ptr, l_ptr, m_ptr, imsizex_upsampled,
+                     imsizey_upsampled, samples, dl_upsampled, dm_upsampled,
                      total_samples](T &output, const T &input) {
     assert(input.size() == l_ptr->size());
     output = T::Zero(cols);
@@ -224,7 +233,7 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
       assert(k >= 0);
       const t_real l_val = (*l_ptr)(k);
       const t_real m_val = (*m_ptr)(k);
-      const t_complex dde_val = dde(l_val * dl_upsampled, m_val * dm_upsampled);
+      const t_complex dde_val = (*dde_ptr)(k);
       for (t_int jl = 1; jl < jl_max + 1; ++jl) {
         const t_real k_l = std::floor(l_val - jl_max * 0.5);
         const t_int q = k_l + jl;
