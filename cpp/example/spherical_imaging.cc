@@ -36,7 +36,7 @@ int main(int nargs, char const** args) {
   ARGS_MACRO(coordinate_scaling, 8, 1., t_real)
 #undef ARGS_MACRO
   const t_real M = L;
-  const t_int num_theta = 4096;
+  const t_int num_theta = 2048;
   const t_int num_phi = 2 * num_theta - 1;
   const t_int number_of_samples = num_phi * num_theta;
   const t_real beam_l = 0;
@@ -46,7 +46,7 @@ int main(int nargs, char const** args) {
   const t_int Ju = 4;
   const t_int Jv = 4;
   const t_int Jw = 1000;
-  const t_real oversample_ratio_image_domain = 1;
+  const t_real oversample_ratio_image_domain = 2;
   const t_real oversample_ratio = 2;
   const kernels::kernel kernel = kernels::kernel::kb;
   const operators::fftw_plan ft_plan = operators::fftw_plan::estimate;
@@ -85,7 +85,6 @@ int main(int nargs, char const** args) {
   sopt::LinearTransform<Vector<t_complex>> const m_op = sopt::LinearTransform<Vector<t_complex>>(
       std::get<0>(measure_op), {0, 1, number_of_samples}, std::get<1>(measure_op), {0, 1, num_vis});
   const Vector<t_complex> output = m_op.adjoint() * (Vector<t_complex>::Ones(1));
-
   Vector<t_real> l = Vector<t_real>::Zero(number_of_samples);
   Vector<t_real> m = Vector<t_real>::Zero(number_of_samples);
   Vector<t_real> n = Vector<t_real>::Zero(number_of_samples);
