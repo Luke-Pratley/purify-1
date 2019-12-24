@@ -45,7 +45,7 @@ int main(int nargs, char const **args) {
 
   const t_real phi_0 = 0. * constant::pi / 180.;
   const t_real theta_0 = 90. * constant::pi / 180.;
-  const t_int max_ell = 4096;
+  const t_int max_ell = 2048;
 
   t_uint const imsizex = max_ell;
   t_uint const imsizey = max_ell;
@@ -58,7 +58,7 @@ int main(int nargs, char const **args) {
   const t_int Ju = 4;
   const t_int Jv = 4;
   const t_int Jw = 256;
-  const t_real oversample_ratio_image_domain = 1;
+  const t_real oversample_ratio_image_domain = 2;
   const t_real oversample_ratio = 2;
   const bool uvw_stacking = true;
   const kernels::kernel kernel = kernels::kernel::kb;
