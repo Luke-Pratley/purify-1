@@ -216,6 +216,21 @@ utilities::vis_params uv_stacking(utilities::vis_params const &params,
                (w_mean - output_data.w.array()).cwiseAbs().maxCoeff());
   return output_data;
 }
+utilities::vis_params distribute_all_to_all(utilities::vis_params const &params,
+                                      sopt::mpi::Communicator const &comm) {
+  const t_int size = std::ceil(comm.all_sum_all(params.size()) / comm.size());
+  std::vector<t_int> image_index = std::vector<t_int>(params.size(), 0);
+  t_int total = 0;
+  for (t_int rank = 0; rank < comm.size(); rank++) {
+    if (rank == comm.rank())
+      for (t_int i = 0; i < params.size(); i++) {
+        image_index[i] = std::floor(total / size);
+        total++;
+      }
+    total = comm.broadcast<t_int>(total, rank);
+  }
+  return utilities::regroup_and_all_to_all(params, image_index, comm);
+}
 std::tuple<utilities::vis_params, std::vector<t_int>, std::vector<t_real>>
 w_stacking_with_all_to_all(utilities::vis_params const &params, const t_real du,
                            const t_int min_support, const t_int max_support,

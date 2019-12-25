@@ -51,6 +51,9 @@ utilities::vis_params set_cell_size(const sopt::mpi::Communicator &comm,
 //! \brief distribute data, sort into uv-stacks using MPI, then distribute the stacks
 utilities::vis_params uv_stacking(utilities::vis_params const &params,
                                   sopt::mpi::Communicator const &comm);
+//! \brief distribute data evenly using all to all
+utilities::vis_params distribute_all_to_all(utilities::vis_params const &params,
+                                      sopt::mpi::Communicator const &comm);
 //! \brief distribute data, sort into w-stacks using MPI, then distribute the stacks
 utilities::vis_params w_stacking(utilities::vis_params const &params,
                                  sopt::mpi::Communicator const &comm, const t_int iters,
