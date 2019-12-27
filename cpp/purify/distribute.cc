@@ -34,6 +34,11 @@ std::vector<t_int> distribute_measurements(Vector<t_real> const &u, Vector<t_rea
     plan_name = "w_term";
     break;
   }
+  case plan::u_term: {
+    index = w_distribution(u);
+    plan_name = "u_term";
+    break;
+  }
   default: {
     throw std::runtime_error("Distribution plan not recognised or implimented.");
     break;
@@ -102,6 +107,27 @@ std::vector<t_int> uv_distribution(Vector<t_real> const &u, Vector<t_real> const
     if (node_i > nodes)
       throw std::runtime_error("Node is too large. Nodex = " + std::to_string(node_x) +
                                " Nodey = " + std::to_string(node_y));
+    node_index[i] = node_i;
+    count++;
+  }
+  return node_index;
+}
+std::vector<t_int> u_distribution(Vector<t_real> const &u, const t_int nodes) {
+  const t_real u_min = u.minCoeff();
+  const t_real u_max = u.maxCoeff();
+  return u_distribution(u, nodes, u_min, u_max);
+}
+std::vector<t_int> u_distribution(Vector<t_real> const &u, const t_int nodes, const t_real u_min,
+                                  const t_real u_max) {
+  PURIFY_DEBUG("u ranges {}  {}. ", u_min, u_max);
+  const t_real length = nodes;
+  std::vector<t_int> node_index(u.size());
+  t_int count = 0;
+  for (t_int i = 0; i < u.size(); i++) {
+    const t_int node_i = std::floor((u(i) - u_min) / (u_max - u_min) * length * 0.99);
+    if (node_i < 0) throw std::runtime_error("Can't have negative node.");
+    if (node_i > nodes)
+      throw std::runtime_error("Node is too large. Nodex = " + std::to_string(node_i));
     node_index[i] = node_i;
     count++;
   }
@@ -189,6 +215,12 @@ std::vector<t_int> uv_distribution(sopt::mpi::Communicator const &comm, Vector<t
   t_real const u_max = comm.all_reduce<t_real>(u.maxCoeff(), MPI_MAX);
   t_real const v_max = comm.all_reduce<t_real>(v.maxCoeff(), MPI_MAX);
   return uv_distribution(u, v, nodes, u_min, u_max, v_min, v_max);
+}
+std::vector<t_int> u_distribution(sopt::mpi::Communicator const &comm, Vector<t_real> const &u,
+                                  const t_int nodes) {
+  t_real const u_min = comm.all_reduce<t_real>(u.minCoeff(), MPI_MIN);
+  t_real const u_max = comm.all_reduce<t_real>(u.maxCoeff(), MPI_MAX);
+  return u_distribution(u, nodes, u_min, u_max);
 }
 std::tuple<std::vector<t_int>, std::vector<t_real>> kmeans_algo(
     const Vector<t_real> &w, const t_int number_of_nodes, const t_int iters,

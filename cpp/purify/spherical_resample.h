@@ -497,6 +497,14 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   t_real const w_mean = uvw_stacking ? w.array().mean() : 0.;
   t_real const v_mean = uvw_stacking ? v.array().mean() : 0.;
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
+  if (uvw_stacking) {
+    PURIFY_MEDIUM_LOG("Mean, u: {}, +/- {}", u_mean,
+                      (u_mean - u.array()).cwiseAbs().maxCoeff() * 0.5);
+    PURIFY_MEDIUM_LOG("Mean, v: {}, +/- {}", v_mean,
+                      (v_mean - v.array()).cwiseAbs().maxCoeff() * 0.5);
+    PURIFY_MEDIUM_LOG("Mean, w: {}, +/- {}", w_mean,
+                      (w_mean - w.array()).cwiseAbs().maxCoeff() * 0.5);
+  }
 
   const t_real dl = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 512});
   const t_real dm = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 512});
@@ -556,11 +564,6 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
       base_padding_and_FFT_2d<T>(ftkernelu, ftkernelv, ftkernell, ftkernelm, imsizey, imsizex,
                                  oversample_ratio, oversample_ratio_image_domain, ft_plan);
 
-  if (uvw_stacking) {
-    PURIFY_MEDIUM_LOG("Mean, u: {}, +/- {}", u_mean, (u.maxCoeff() - u.minCoeff()) * 0.5);
-    PURIFY_MEDIUM_LOG("Mean, v: {}, +/- {}", v_mean, (v.maxCoeff() - v.minCoeff()) * 0.5);
-    PURIFY_MEDIUM_LOG("Mean, w: {}, +/- {}", w_mean, (w.maxCoeff() - w.minCoeff()) * 0.5);
-  }
   PURIFY_LOW_LOG("Constructing Weighting and Gridding Operators: WG");
   sopt::OperatorFunction<T> directG, indirectG;
   if (on_the_fly)

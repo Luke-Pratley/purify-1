@@ -216,8 +216,23 @@ utilities::vis_params uv_stacking(utilities::vis_params const &params,
                (w_mean - output_data.w.array()).cwiseAbs().maxCoeff());
   return output_data;
 }
+utilities::vis_params u_stacking(utilities::vis_params const &params,
+                                  sopt::mpi::Communicator const &comm) {
+  const std::vector<t_int> image_index = distribute::u_distribution(comm, params.u, comm.size());
+  const auto output_data = utilities::regroup_and_all_to_all(params, image_index, comm);
+  const t_real u_mean = output_data.u.mean();
+  const t_real v_mean = output_data.v.mean();
+  const t_real w_mean = output_data.w.mean();
+  PURIFY_DEBUG("Node {} has mean u = {} +/- {}. ", comm.rank(), u_mean,
+               (u_mean - output_data.u.array()).cwiseAbs().maxCoeff());
+  PURIFY_DEBUG("Node {} has mean v = {} +/- {}. ", comm.rank(), v_mean,
+               (v_mean - output_data.v.array()).cwiseAbs().maxCoeff());
+  PURIFY_DEBUG("Node {} has mean w = {} +/- {}. ", comm.rank(), w_mean,
+               (w_mean - output_data.w.array()).cwiseAbs().maxCoeff());
+  return output_data;
+}
 utilities::vis_params distribute_all_to_all(utilities::vis_params const &params,
-                                      sopt::mpi::Communicator const &comm) {
+                                            sopt::mpi::Communicator const &comm) {
   const t_int size = std::ceil(comm.all_sum_all(params.size()) / comm.size());
   std::vector<t_int> image_index = std::vector<t_int>(params.size(), 0);
   t_int total = 0;

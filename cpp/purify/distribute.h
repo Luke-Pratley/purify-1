@@ -13,7 +13,7 @@
 
 namespace purify {
 namespace distribute {
-enum class plan { none, equal, radial, w_term, uv_stack };
+enum class plan { none, equal, radial, w_term, uv_stack, u_term };
 //! Distribute visiblities into groups
 std::vector<t_int> distribute_measurements(Vector<t_real> const &u, Vector<t_real> const &v,
                                            Vector<t_real> const &w, t_int const number_of_nodes,
@@ -37,6 +37,8 @@ std::tuple<std::vector<t_int>, std::vector<t_real>> kmeans_algo(
 //! use mpi to distribute uv_stacks
 std::vector<t_int> uv_distribution(sopt::mpi::Communicator const &comm, Vector<t_real> const &u,
                                    Vector<t_real> const &v, const t_int nodes);
+std::vector<t_int> u_distribution(sopt::mpi::Communicator const &comm, Vector<t_real> const &u,
+                                  const t_int nodes);
 //! patition w terms using k-means over MPI
 //! Details returns a tuple (indices for group, centre mean for each group)
 std::tuple<std::vector<t_int>, std::vector<t_real>> kmeans_algo(
@@ -65,6 +67,10 @@ std::vector<t_int> uv_distribution(Vector<t_real> const &u, Vector<t_real> const
 std::vector<t_int> uv_distribution(Vector<t_real> const &u, Vector<t_real> const &v,
                                    const t_int nodes, const t_real u_min, const t_real u_max,
                                    const t_real v_min, const t_real v_max);
+//! Distribute the visiblities into nodes by making a grid in u only 
+std::vector<t_int> u_distribution(Vector<t_real> const &u, t_int const nodes);
+std::vector<t_int> u_distribution(Vector<t_real> const &u, const t_int nodes, const t_real u_min,
+                                  const t_real u_max);
 }  // namespace distribute
 }  // namespace purify
 #endif
