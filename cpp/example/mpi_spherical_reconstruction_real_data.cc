@@ -71,7 +71,7 @@ int main(int nargs, char const **args) {
   t_real gamma = 0.;
   {
     uv_data =
-        read_measurements::read_measurements(file_names, comm, distribute::plan::radial, true);
+        read_measurements::read_measurements(file_names, comm, distribute::plan::w_term, true);
     t_int flag_size = 0;
     for (t_int i = 0; i < uv_data.size(); i++)
       if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2) +
@@ -110,14 +110,14 @@ int main(int nargs, char const **args) {
     uv_data.vis =
         vis.array() * Eigen::exp(-2 * constant::pi * t_complex(0, 1.) * (w - uv_data.w).array());
     uv_data.weights = weights;
-    uv_data = utilities::distribute_all_to_all(uv_data, comm);
+    uv_data = utilities::conjugate_w(uv_data);
+    uv_data = utilities::uv_stacking(uv_data, comm);
     const t_real norm = std::sqrt(
         comm.all_sum_all((uv_data.weights.real().array() * uv_data.weights.real().array()).sum()) /
         comm.all_sum_all(uv_data.size()));
     // normalise weights
     uv_data.weights = uv_data.weights / norm;
     uv_data.vis = uv_data.vis.array() * uv_data.weights.array();
-    uv_data = utilities::conjugate_w(uv_data);
     PURIFY_DEBUG("Node {} has {} visibilities after flaggging long baselines.", comm.rank(),
                  uv_data.size());
   }
@@ -162,7 +162,7 @@ int main(int nargs, char const **args) {
 
   auto const algo = factory::fb_factory<sopt::algorithm::ImagingForwardBackward<t_complex>>(
       factory::algo_distribution::mpi_serial, measurements_transform, wavelets, uv_data, sigma,
-      sigma * sigma * 0.5, 0, imsizey, imsizex, sara_size, 500, true, true, false, 1e-4, 1e-4, 50,
+      sigma * sigma * 0.5, 0, imsizey, imsizex, sara_size, 1000, true, true, false, 1e-5, 1e-5, 50,
       op_norm);
   // primaldual->l1_proximal_weights(l1_weights);
   auto const diagnostic = (*algo)();
