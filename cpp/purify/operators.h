@@ -513,7 +513,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_degrid_ope
   std::tie(directG, indirectG) =
       (on_the_fly)
           ? purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
-                u, v, weights, imsizey, imsizex, oversample_ratio, kernelu, Ju, 4e5)
+                u, v, weights, imsizey, imsizex, oversample_ratio, kernelu, Ju, 2e5 * Ju / 2)
           : purify::operators::init_gridding_matrix_2d<T>(
                 u, v, weights, imsizey, imsizex, oversample_ratio, kernelv, kernelu, Ju, Jv);
   auto direct = sopt::chained_operators<T>(directG, directFZ);
@@ -553,7 +553,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_mpi_degrid
   std::tie(directG, indirectG) =
       (on_the_fly)
           ? purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
-                comm, u, v, weights, imsizey, imsizex, oversample_ratio, kernelu, Ju, 4e5)
+                comm, u, v, weights, imsizey, imsizex, oversample_ratio, kernelu, Ju, 2e5 * Ju / 2)
           : purify::operators::init_gridding_matrix_2d<T>(
                 comm, u, v, weights, imsizey, imsizex, oversample_ratio, kernelv, kernelu, Ju, Jv);
   auto direct = sopt::chained_operators<T>(directG, directFZ);
@@ -573,7 +573,8 @@ base_mpi_all_to_all_degrid_operator_2d(
     const t_uint &imsizex, const t_real oversample_ratio = 2,
     const kernels::kernel kernel = kernels::kernel::kb, const t_uint Ju = 4, const t_uint Jv = 4,
     const operators::fftw_plan ft_plan = operators::fftw_plan::measure,
-    const bool w_stacking = false, const t_real cellx = 1, const t_real celly = 1) {
+    const bool w_stacking = false, const t_real cellx = 1, const t_real celly = 1,
+    const bool on_the_fly = true) {
   const t_uint number_of_images = comm.size();
   if (std::any_of(image_index.begin(), image_index.end(), [&number_of_images](int index) {
         return index < 0 or index > (number_of_images - 1);
@@ -598,11 +599,15 @@ base_mpi_all_to_all_degrid_operator_2d(
   const t_int local_grid_size =
       std::floor(imsizex * oversample_ratio) * std::floor(imsizex * oversample_ratio);
   std::tie(directG, indirectG) =
-      purify::operators::init_gridding_matrix_2d_all_to_all<T, std::int64_t>(
-          comm, static_cast<std::int64_t>(local_grid_size),
-          static_cast<std::int64_t>(comm.rank()) * static_cast<std::int64_t>(local_grid_size),
-          number_of_images, image_index, u, v, weights, imsizey, imsizex, oversample_ratio, kernelv,
-          kernelu, Ju, Jv);
+      (on_the_fly)
+          ? purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
+                comm, number_of_images, image_index, u, v, weights, imsizey, imsizex,
+                oversample_ratio, kernelu, Ju, 2e5 * Ju / 2)
+          : purify::operators::init_gridding_matrix_2d_all_to_all<T, std::int64_t>(
+                comm, static_cast<std::int64_t>(local_grid_size),
+                static_cast<std::int64_t>(comm.rank()) * static_cast<std::int64_t>(local_grid_size),
+                number_of_images, image_index, u, v, weights, imsizey, imsizex, oversample_ratio,
+                kernelv, kernelu, Ju, Jv);
   auto direct = sopt::chained_operators<T>(directG, directFZ);
   auto indirect = sopt::chained_operators<T>(indirectFZ, indirectG);
   PURIFY_LOW_LOG("Finished consturction of Φ.");

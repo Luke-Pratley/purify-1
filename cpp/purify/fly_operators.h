@@ -495,8 +495,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     const t_real k_v = std::floor(v_val - jv_max * 0.5);
     for (t_int jv = 1; jv < jv_max + 1; ++jv) {
       const t_uint p = utilities::mod(k_v + jv, ftsizev_);
-      const t_real c_0 =
-          static_cast<t_int>(std::floor(2 * std::abs(v_val - (k_v + jv)) * total_samples / jv_max));
+      const t_real c_0 = static_cast<t_int>(
+          std::floor(2 * std::abs(v_val - (k_v + jv)) * (total_samples - 1) / jv_max));
       for (t_int ju = 1; ju < ju_max + 1; ++ju) {
         const t_uint q = utilities::mod(k_u + ju, ftsizeu_);
         const t_int i_0 = static_cast<t_int>(
@@ -592,14 +592,14 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       for (t_int jv = 1; jv < jv_max + 1; ++jv) {
         const t_uint p = utilities::mod(k_v + jv, ftsizev_);
         const t_real c_0 = static_cast<t_int>(
-            std::floor(2 * std::abs(v_val - (k_v + jv)) * total_samples / jv_max));
+            std::floor(2 * std::abs(v_val - (k_v + jv)) * (total_samples - 1) / jv_max));
         assert(c_0 >= 0);
         assert(c_0 < total_samples);
         const t_real kernelv_val = samples[c_0] * (1. - (2 * (p % 2)));
         for (t_int ju = 1; ju < ju_max + 1; ++ju) {
           const t_uint q = utilities::mod(k_u + ju, ftsizeu_);
           const t_int i_0 = static_cast<t_int>(
-              std::floor(2 * std::abs(u_val - (k_u + ju)) * total_samples / ju_max));
+              std::floor(2 * std::abs(u_val - (k_u + ju)) * (total_samples - 1) / ju_max));
           assert(i_0 >= 0);
           assert(i_0 < total_samples);
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
