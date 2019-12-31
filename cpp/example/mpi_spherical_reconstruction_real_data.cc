@@ -39,7 +39,7 @@ int main(int nargs, char const **args) {
   const std::string &dirtyfile = "sphere_dirty.fits";
   const std::string &psffile = "sphere_psf.fits";
 
-  const t_real L = 1.5;
+  const t_real L = 1.9;
   const t_real max_w = 0.;  // lambda
   const t_real snr = 30;
 
@@ -77,7 +77,7 @@ int main(int nargs, char const **args) {
       if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2) +
                     std::pow(uv_data.w(i), 2)) > 0)
         if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2) +
-                      std::pow(uv_data.w(i), 2)) < 200)
+                      std::pow(uv_data.w(i), 2)) < 300)
           flag_size++;
     Vector<t_real> u = Vector<t_real>::Zero(flag_size);
     Vector<t_real> v = Vector<t_real>::Zero(flag_size);
@@ -90,7 +90,7 @@ int main(int nargs, char const **args) {
       if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2) +
                     std::pow(uv_data.w(i), 2)) > 0)
         if (std::sqrt(std::pow(uv_data.u(i), 2) + std::pow(uv_data.v(i), 2) +
-                      std::pow(uv_data.w(i), 2)) < 200) {
+                      std::pow(uv_data.w(i), 2)) < 300) {
           u(count) = uv_data.u(i);
           v(count) = uv_data.v(i);
           w(count) = uv_data.w(i);
@@ -106,7 +106,7 @@ int main(int nargs, char const **args) {
 
     uv_data.u = spherical_resample::calculate_rotated_l(u, v, w, alpha, beta, gamma);
     uv_data.v = spherical_resample::calculate_rotated_m(u, v, w, alpha, beta, gamma);
-    uv_data.w = spherical_resample::calculate_rotated_n(u, v, w, alpha, beta, gamma);
+    uv_data.w = -spherical_resample::calculate_rotated_n(u, v, w, alpha, beta, gamma);
     uv_data.vis =
         vis.array() * Eigen::exp(-2 * constant::pi * t_complex(0, 1.) * (w - uv_data.w).array());
     uv_data.weights = weights;
@@ -167,7 +167,6 @@ int main(int nargs, char const **args) {
   // primaldual->l1_proximal_weights(l1_weights);
   auto const diagnostic = (*algo)();
 
-  assert(diagnostic.x.size() == all_sky_image.size());
   Image<t_complex> image = Image<t_complex>::Map(diagnostic.x.data(), imsizex, imsizey);
   if (comm.is_root()) pfitsio::write2d(image.real(), outfile_fits);
   Vector<t_complex> residuals = measurements_transform->adjoint() *
