@@ -45,7 +45,7 @@ utilities::vis_params remove_redundent(const utilities::vis_params &uv_data) {
       }
   }
   utilities::vis_params output_data = uv_data;
-  assert(filter.sum() < = filter.size());
+  assert(filter.sum() <= filter.size());
   output_data.u = Vector<t_real>::Zero(filter.sum());
   output_data.v = Vector<t_real>::Zero(filter.sum());
   output_data.w = Vector<t_real>::Zero(filter.sum());

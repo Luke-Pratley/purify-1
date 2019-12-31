@@ -495,12 +495,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     const t_real k_v = std::floor(v_val - jv_max * 0.5);
     for (t_int jv = 1; jv < jv_max + 1; ++jv) {
       const t_uint p = utilities::mod(k_v + jv, ftsizev_);
-      const t_real c_0 = static_cast<t_int>(
-          std::floor(2 * std::abs(v_val - (k_v + jv)) * (total_samples - 1) / jv_max));
       for (t_int ju = 1; ju < ju_max + 1; ++ju) {
         const t_uint q = utilities::mod(k_u + ju, ftsizeu_);
-        const t_int i_0 = static_cast<t_int>(
-            std::floor(2 * std::abs(u_val - (k_u + ju)) * total_samples / ju_max));
         const std::int64_t index =
             static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) +
             static_cast<std::int64_t>((*image_index_ptr)[m]) *
@@ -525,9 +521,10 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
   PURIFY_LOW_LOG("Non Zero grid locations: {} ", mapping.nonZeros());
 
   const auto degrid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
-                       ftsizeu_, ftsizev_, distributor, mapping, image_index_ptr,
-                       comm](T &output, const T &input) {
+                       ftsizeu_, ftsizev_, distributor, mapping,
+                       image_index_ptr](T &output, const T &input) {
     assert(input.size() == ftsizeu_ * ftsizev_);
+    assert(image_index_ptr->size() == rows);
     T input_buff;
     distributor.recv_grid(input, input_buff);
 #pragma omp parallel for
@@ -537,58 +534,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       const t_real v_val = (*v_ptr)(m);
       const t_real k_u = std::floor(u_val - ju_max * 0.5);
       const t_real k_v = std::floor(v_val - jv_max * 0.5);
-      for (t_int jv = 1; jv < jv_max + 1; ++jv) {
-        const t_uint p = utilities::mod(k_v + jv, ftsizev_);
-        const t_real c_0 = static_cast<t_int>(
-            std::floor(2 * std::abs(v_val - (k_v + jv)) * total_samples / jv_max));
-        assert(c_0 >= 0);
-        assert(c_0 < total_samples);
-        const t_real kernelv_val = samples[c_0] * (1. - (2 * (p % 2)));
-        for (t_int ju = 1; ju < ju_max + 1; ++ju) {
-          const t_uint q = utilities::mod(k_u + ju, ftsizeu_);
-          const t_int i_0 = static_cast<t_int>(
-              std::floor(2 * std::abs(u_val - (k_u + ju)) * total_samples / ju_max));
-          assert(i_0 >= 0);
-          assert(i_0 < total_samples);
-          const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
-          const std::int64_t index =
-              static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) +
-              static_cast<std::int64_t>((*image_index_ptr)[m]) *
-                  static_cast<std::int64_t>(ftsizev_ * ftsizeu_);
-          const t_real sign = kernelu_val * kernelv_val;
-          result += input_buff(mapping.coeff(index)) * sign;
-        }
-      }
-      output(m) = result;
-    }
-    output.array() *= (*weights_ptr).array();
-  };
-  const t_int nonZeros_size = mapping.nonZeros();
-  const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
-                     ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor, image_index_ptr,
-                     comm](T &output, const T &input) {
-    const t_int N = ftsizeu_ * ftsizev_;
-    output = T::Zero(N);
-#ifdef PURIFY_OPENMP
-    t_int const max_threads = omp_get_max_threads();
-#else
-    t_int const max_threads = 1;
-#endif
-    T output_compressed = T::Zero(nonZeros_size * max_threads);
-    assert(output.size() == N);
-#pragma omp parallel for
-    for (t_int m = 0; m < rows; ++m) {
-      t_complex result = 0;
-#ifdef PURIFY_OPENMP
-      const t_int shift = omp_get_thread_num() * nonZeros_size;
-#else
-      const t_int shift = 0;
-#endif
-      const t_real u_val = (*u_ptr)(m);
-      const t_real v_val = (*v_ptr)(m);
-      const t_real k_u = std::floor(u_val - ju_max * 0.5);
-      const t_real k_v = std::floor(v_val - jv_max * 0.5);
-      const t_complex vis = input(m) * std::conj((*weights_ptr)(m));
+      const std::int64_t grid_shift = static_cast<std::int64_t>((*image_index_ptr)[m]) *
+                                      static_cast<std::int64_t>(ftsizev_ * ftsizeu_);
       for (t_int jv = 1; jv < jv_max + 1; ++jv) {
         const t_uint p = utilities::mod(k_v + jv, ftsizev_);
         const t_real c_0 = static_cast<t_int>(
@@ -604,16 +551,71 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           assert(i_0 < total_samples);
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
           const std::int64_t index =
-              static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) +
-              static_cast<std::int64_t>((*image_index_ptr)[m]) *
-                  static_cast<std::int64_t>(ftsizev_ * ftsizeu_);
+              static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
+          const t_real sign = kernelu_val * kernelv_val;
+          result += input_buff(mapping.coeff(index)) * sign;
+        }
+      }
+      output(m) = result;
+    }
+    output.array() *= (*weights_ptr).array();
+  };
+  const t_int nonZeros_size = mapping.nonZeros();
+  const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
+                     ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
+                     image_index_ptr](T &output, const T &input) {
+    const t_int N = ftsizeu_ * ftsizev_;
+    output = T::Zero(N);
+    assert(input.size() == rows);
+    assert(image_index_ptr->size() == rows);
+#ifdef PURIFY_OPENMP
+    t_int const max_threads = omp_get_max_threads() + 1;
+#else
+    t_int const max_threads = 1;
+#endif
+    T output_compressed = T::Zero(nonZeros_size * max_threads);
+    assert(output.size() == N);
+#pragma omp parallel for
+    for (t_int m = 0; m < rows; ++m) {
+      t_complex result = 0;
+#ifdef PURIFY_OPENMP
+      const std::int64_t shift = omp_get_thread_num() * nonZeros_size;
+#else
+      const std::int64_t shift = 0;
+#endif
+      const t_real u_val = (*u_ptr)(m);
+      const t_real v_val = (*v_ptr)(m);
+      const t_real k_u = std::floor(u_val - ju_max * 0.5);
+      const t_real k_v = std::floor(v_val - jv_max * 0.5);
+      const t_complex vis = input(m) * std::conj((*weights_ptr)(m));
+      const std::int64_t grid_shift = static_cast<std::int64_t>((*image_index_ptr)[m]) *
+                                      static_cast<std::int64_t>(ftsizev_ * ftsizeu_);
+      for (t_int jv = 1; jv < jv_max + 1; ++jv) {
+        const t_uint p = utilities::mod(k_v + jv, ftsizev_);
+        const t_real c_0 = static_cast<t_int>(
+            std::floor(2 * std::abs(v_val - (k_v + jv)) * (total_samples - 1) / jv_max));
+        assert(c_0 >= 0);
+        assert(c_0 < total_samples);
+        const t_real kernelv_val = samples[c_0] * (1. - (2 * (p % 2)));
+        for (t_int ju = 1; ju < ju_max + 1; ++ju) {
+          const t_uint q = utilities::mod(k_u + ju, ftsizeu_);
+          const t_int i_0 = static_cast<t_int>(
+              std::floor(2 * std::abs(u_val - (k_u + ju)) * (total_samples - 1) / ju_max));
+          assert(i_0 >= 0);
+          assert(i_0 < total_samples);
+          const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
+          const std::int64_t index =
+              static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
           const t_complex result = kernelu_val * kernelv_val * vis;
-          output_compressed(mapping.coeff(index) + shift) += result;
+          if ((mapping.coeff(index) + shift) > output_compressed.size())
+            std::cout << static_cast<std::int64_t>(mapping.coeff(index) + shift) << " "
+                      << omp_get_thread_num()  << std::endl;
+          output_compressed(static_cast<std::int64_t>(mapping.coeff(index) + shift)) += result;
         }
       }
     }
-    for (t_int m = 1; m < max_threads; m++) {
-      const t_int loop_shift = m * nonZeros_size;
+    for (std::int64_t m = 1; m < max_threads; m++) {
+      const std::int64_t loop_shift = m * nonZeros_size;
       output_compressed.segment(0, nonZeros_size) +=
           output_compressed.segment(loop_shift, nonZeros_size);
     }

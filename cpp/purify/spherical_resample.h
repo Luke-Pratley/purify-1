@@ -191,7 +191,7 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
                        imsizey_upsampled, samples, dl_upsampled, dm_upsampled,
                        total_samples](T &output, const T &input) {
     output = T::Zero(l_ptr->size());
-    assert(input.size() == imsizex * imsizey);
+    assert(input.size() == cols);
 #pragma omp parallel for
     for (t_int k = 0; k < rows; ++k) {
       assert(k < rows);
