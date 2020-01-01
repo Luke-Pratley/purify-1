@@ -111,7 +111,7 @@ int main(int nargs, char const **args) {
         vis.array() * Eigen::exp(-2 * constant::pi * t_complex(0, 1.) * (w - uv_data.w).array());
     uv_data.weights = weights;
     uv_data = utilities::conjugate_w(uv_data);
-    uv_data = utilities::uv_stacking(uv_data, comm);
+    uv_data = utilities::distribute_all_to_all(uv_data, comm);
     const t_real norm = std::sqrt(
         comm.all_sum_all((uv_data.weights.real().array() * uv_data.weights.real().array()).sum()) /
         comm.all_sum_all(uv_data.size()));
