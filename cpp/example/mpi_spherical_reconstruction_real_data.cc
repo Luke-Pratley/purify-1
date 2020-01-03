@@ -111,7 +111,7 @@ int main(int nargs, char const **args) {
         vis.array() * Eigen::exp(-2 * constant::pi * t_complex(0, 1.) * (w - uv_data.w).array());
     uv_data.weights = weights;
     uv_data = utilities::conjugate_w(uv_data);
-    uv_data = utilities::distribute_all_to_all(uv_data, comm);
+
     const t_real norm = std::sqrt(
         comm.all_sum_all((uv_data.weights.real().array() * uv_data.weights.real().array()).sum()) /
         comm.all_sum_all(uv_data.size()));
@@ -131,12 +131,13 @@ int main(int nargs, char const **args) {
 
   const t_real sigma = 320;
 
+  const auto uvw_stacks = distribute::uv_all_to_all(comm, uv_data.u, uv_data.v, uv_data.w);
   std::shared_ptr<sopt::LinearTransform<Vector<t_complex>>> const measurements_transform =
-      spherical_resample::measurement_operator::planar_degrid_operator<
+      spherical_resample::measurement_operator::planar_degrid_all_to_all_operator<
           Vector<t_complex>, std::function<t_real(t_int)>>(
-          comm, number_of_samples, phi_0, theta_0, phi, theta, uv_data, oversample_ratio,
-          oversample_ratio_image_domain, kernel, Ju, Jv, Jl, Jm, ft_plan, uvw_stacking, L, L, 0.,
-          0.);
+          comm, std::get<0>(uvw_stacks), std::get<1>(uvw_stacks), number_of_samples, phi_0, theta_0,
+          phi, theta, uv_data, oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jv, Jl,
+          Jm, ft_plan, uvw_stacking, L, L, 0., 0.);
   {
     const Vector<t_complex> dmap = measurements_transform->adjoint() * uv_data.vis;
     const Image<t_complex> dmap_image =
