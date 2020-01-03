@@ -112,27 +112,6 @@ std::vector<t_int> uv_distribution(Vector<t_real> const &u, Vector<t_real> const
   }
   return node_index;
 }
-std::vector<t_int> u_distribution(Vector<t_real> const &u, const t_int nodes) {
-  const t_real u_min = u.minCoeff();
-  const t_real u_max = u.maxCoeff();
-  return u_distribution(u, nodes, u_min, u_max);
-}
-std::vector<t_int> u_distribution(Vector<t_real> const &u, const t_int nodes, const t_real u_min,
-                                  const t_real u_max) {
-  PURIFY_DEBUG("u ranges {}  {}. ", u_min, u_max);
-  const t_real length = nodes;
-  std::vector<t_int> node_index(u.size());
-  t_int count = 0;
-  for (t_int i = 0; i < u.size(); i++) {
-    const t_int node_i = std::floor((u(i) - u_min) / (u_max - u_min) * length * 0.99);
-    if (node_i < 0) throw std::runtime_error("Can't have negative node.");
-    if (node_i > nodes)
-      throw std::runtime_error("Node is too large. Nodex = " + std::to_string(node_i));
-    node_index[i] = node_i;
-    count++;
-  }
-  return node_index;
-}
 
 Vector<t_int> equal_distribution(Vector<t_real> const &u, Vector<t_real> const &v,
                                  t_int const grid_size) {
@@ -221,6 +200,50 @@ std::vector<t_int> u_distribution(sopt::mpi::Communicator const &comm, Vector<t_
   t_real const u_min = comm.all_reduce<t_real>(u.minCoeff(), MPI_MIN);
   t_real const u_max = comm.all_reduce<t_real>(u.maxCoeff(), MPI_MAX);
   return u_distribution(u, nodes, u_min, u_max);
+}
+std::tuple<std::vector<t_int>, std::vector<std::tuple<t_real, t_real, t_real>>> uv_all_to_all(
+    sopt::mpi::Communicator const &comm, Vector<t_real> const &u, Vector<t_real> const &v,
+    Vector<t_real> const &w) {
+  const t_int nodes = comm.size();
+  t_real const u_min = comm.all_reduce<t_real>(u.minCoeff(), MPI_MIN);
+  t_real const v_min = comm.all_reduce<t_real>(v.minCoeff(), MPI_MIN);
+  t_real const u_max = comm.all_reduce<t_real>(u.maxCoeff(), MPI_MAX);
+  t_real const v_max = comm.all_reduce<t_real>(v.maxCoeff(), MPI_MAX);
+  PURIFY_DEBUG("u ranges {}  {}. ", u_min, u_max);
+  PURIFY_DEBUG("v ranges {}  {}. ", v_min, v_max);
+  if (std::floor(std::sqrt(nodes)) != std::ceil(std::sqrt(nodes)))
+    throw std::runtime_error(
+        "Number of nodes is not square, which is required for this implimentation of uv_stacking. "
+        "Nodes = " +
+        std::to_string(nodes));
+  const t_real length = std::sqrt(nodes);
+  std::vector<t_int> node_index(u.size());
+  std::vector<std::tuple<t_real, t_real, t_real>> uvw_stack =
+      std::vector<std::tuple<t_real, t_real, t_real>>(nodes, std::make_tuple(0, 0, 0));
+  std::vector<t_int> node_count(nodes, 0);
+  for (t_int i = 0; i < u.size(); i++) {
+    const t_int node_x = std::floor((u(i) - u_min) / (u_max - u_min) * length * 0.99);
+    const t_int node_y = std::floor((v(i) - v_min) / (v_max - v_min) * length * 0.99);
+    const t_int node_i = node_x * length + node_y;
+    if (node_i < 0) throw std::runtime_error("Can't have negative node.");
+    if (node_i > nodes)
+      throw std::runtime_error("Node is too large. Nodex = " + std::to_string(node_x) +
+                               " Nodey = " + std::to_string(node_y));
+    node_index[i] = node_i;
+    std::get<0>(uvw_stack[node_i]) += u(i);
+    std::get<1>(uvw_stack[node_i]) += v(i);
+    std::get<2>(uvw_stack[node_i]) += w(i);
+    node_count[node_i]++;
+  }
+  for (t_int node_i = 0; node_i < nodes; node_i++) {
+    std::get<0>(uvw_stack[node_i]) = comm.all_sum_all<t_real>(std::get<0>(uvw_stack.at(node_i))) /
+                                     comm.all_sum_all<t_real>(node_count.at(node_i));
+    std::get<1>(uvw_stack[node_i]) = comm.all_sum_all<t_real>(std::get<1>(uvw_stack.at(node_i))) /
+                                     comm.all_sum_all<t_real>(node_count.at(node_i));
+    std::get<2>(uvw_stack[node_i]) = comm.all_sum_all<t_real>(std::get<2>(uvw_stack.at(node_i))) /
+                                     comm.all_sum_all<t_real>(node_count.at(node_i));
+  }
+  return std::make_tuple(node_index, uvw_stack);
 }
 std::tuple<std::vector<t_int>, std::vector<t_real>> kmeans_algo(
     const Vector<t_real> &w, const t_int number_of_nodes, const t_int iters,
