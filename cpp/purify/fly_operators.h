@@ -72,6 +72,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     mapping.coeffRef(nonZeros_vec[index]) = index;
   PURIFY_LOW_LOG("Non Zero grid locations: {} ", mapping.nonZeros());
 
+  const t_int nonZeros_size = nonZeros_vec.size();
   const auto degrid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                        ftsizeu_, ftsizev_](T &output, const T &input) {
     output = T::Zero(u_ptr->size());
@@ -110,7 +111,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
   };
 
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
-                     ftsizeu_, ftsizev_, mapping, nonZeros_vec](T &output, const T &input) {
+                     ftsizeu_, ftsizev_, mapping, nonZeros_size,
+                     nonZeros_vec](T &output, const T &input) {
     const t_int N = ftsizeu_ * ftsizev_;
     output = T::Zero(N);
 #ifdef PURIFY_OPENMP
@@ -118,7 +120,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
 #else
     t_int const max_threads = 1;
 #endif
-    T output_compressed = T::Zero(nonZeros_vec.size() * max_threads);
+    T output_compressed = T::Zero(nonZeros_size * max_threads);
     assert(output.size() == N);
 #ifdef PURIFY_OPENMP
 #pragma omp parallel for
@@ -126,7 +128,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
 #ifdef PURIFY_OPENMP
-      const t_int shift = omp_get_thread_num() * nonZeros_vec.size();
+      const t_int shift = omp_get_thread_num() * nonZeros_size;
 #else
       const t_int shift = 0;
 #endif
@@ -156,11 +158,11 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       }
     }
     for (t_int m = 1; m < max_threads; m++) {
-      const t_int loop_shift = m * nonZeros_vec.size();
-      output_compressed.segment(0, nonZeros_vec.size()) +=
-          output_compressed.segment(loop_shift, nonZeros_vec.size());
+      const t_int loop_shift = m * nonZeros_size;
+      output_compressed.segment(0, nonZeros_size) +=
+          output_compressed.segment(loop_shift, nonZeros_size);
     }
-    for (t_int index = 0; index < nonZeros_vec.size(); index++)
+    for (t_int index = 0; index < nonZeros_size; index++)
       output(nonZeros_vec[index]) += output_compressed(index);
   };
   return std::make_tuple(degrid, grid);
@@ -215,7 +217,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
   for (t_int index = 0; index < nonZeros_vec.size(); index++)
     mapping.coeffRef(nonZeros_vec[index]) = index;
   PURIFY_LOW_LOG("Non Zero grid locations: {} ", mapping.nonZeros());
-
+  const t_int nonZeros_size = nonZeros_vec.size();
   const auto degrid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples_u, samples_v,
                        total_samples, ftsizeu_, ftsizev_](T &output, const T &input) {
     output = T::Zero(u_ptr->size());
@@ -252,16 +254,26 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
   };
 
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples_u, samples_v,
-                     total_samples, ftsizeu_, ftsizev_, mapping,
+                     total_samples, ftsizeu_, ftsizev_, mapping, nonZeros_size,
                      nonZeros_vec](T &output, const T &input) {
     const t_int N = ftsizeu_ * ftsizev_;
+
     output = T::Zero(N);
-    T output_compressed = T::Zero(nonZeros_vec.size() * omp_get_max_threads());
+#ifdef PURIFY_OPENMP
+    t_int const max_threads = omp_get_max_threads();
+#else
+    t_int const max_threads = 1;
+#endif
+    T output_compressed = T::Zero(nonZeros_size * max_threads);
     assert(output.size() == N);
 #pragma omp parallel for
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
-      const t_int shift = omp_get_thread_num() * nonZeros_vec.size();
+#ifdef PURIFY_OPENMP
+      const t_int shift = omp_get_thread_num() * nonZeros_size;
+#else
+      const t_int shift = 0;
+#endif
       const t_real u_val = (*u_ptr)(m);
       const t_real v_val = (*v_ptr)(m);
       const t_real k_u = std::floor(u_val - ju_max * 0.5);
@@ -287,12 +299,12 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
         }
       }
     }
-    for (t_int m = 1; m < omp_get_max_threads(); m++) {
-      const t_int loop_shift = m * nonZeros_vec.size();
-      output_compressed.segment(0, nonZeros_vec.size()) +=
-          output_compressed.segment(loop_shift, nonZeros_vec.size());
+    for (t_int m = 1; m < max_threads; m++) {
+      const t_int loop_shift = m * nonZeros_size;
+      output_compressed.segment(0, nonZeros_size) +=
+          output_compressed.segment(loop_shift, nonZeros_size);
     }
-    for (t_int index = 0; index < nonZeros_vec.size(); index++)
+    for (t_int index = 0; index < nonZeros_size; index++)
       output(nonZeros_vec[index]) += output_compressed(index);
   };
   return std::make_tuple(degrid, grid);
@@ -519,6 +531,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
   for (t_int index = 0; index < nonZeros_vec.size(); index++)
     mapping.coeffRef(nonZeros_vec[index]) = index;
   PURIFY_LOW_LOG("Non Zero grid locations: {} ", mapping.nonZeros());
+  const t_int nonZeros_size = nonZeros_vec.size();
 
   const auto degrid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                        ftsizeu_, ftsizev_, distributor, mapping,
@@ -560,7 +573,6 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     }
     output.array() *= (*weights_ptr).array();
   };
-  const t_int nonZeros_size = mapping.nonZeros();
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                      ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
                      image_index_ptr](T &output, const T &input) {
@@ -569,7 +581,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     assert(input.size() == rows);
     assert(image_index_ptr->size() == rows);
 #ifdef PURIFY_OPENMP
-    t_int const max_threads = omp_get_max_threads() + 1;
+    t_int const max_threads = omp_get_max_threads();
 #else
     t_int const max_threads = 1;
 #endif
@@ -607,9 +619,6 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           const std::int64_t index =
               static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
           const t_complex result = kernelu_val * kernelv_val * vis;
-          if ((mapping.coeff(index) + shift) > output_compressed.size())
-            std::cout << static_cast<std::int64_t>(mapping.coeff(index) + shift) << " "
-                      << omp_get_thread_num()  << std::endl;
           output_compressed(static_cast<std::int64_t>(mapping.coeff(index) + shift)) += result;
         }
       }
@@ -619,7 +628,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       output_compressed.segment(0, nonZeros_size) +=
           output_compressed.segment(loop_shift, nonZeros_size);
     }
-    distributor.send_grid(output_compressed.segment(0, nonZeros_size), output);
+    distributor.send_grid(output_compressed.segment(0, nonZeros_size).eval(), output);
   };
   return std::make_tuple(degrid, grid);
 }
