@@ -195,12 +195,6 @@ std::vector<t_int> uv_distribution(sopt::mpi::Communicator const &comm, Vector<t
   t_real const v_max = comm.all_reduce<t_real>(v.maxCoeff(), MPI_MAX);
   return uv_distribution(u, v, nodes, u_min, u_max, v_min, v_max);
 }
-std::vector<t_int> u_distribution(sopt::mpi::Communicator const &comm, Vector<t_real> const &u,
-                                  const t_int nodes) {
-  t_real const u_min = comm.all_reduce<t_real>(u.minCoeff(), MPI_MIN);
-  t_real const u_max = comm.all_reduce<t_real>(u.maxCoeff(), MPI_MAX);
-  return u_distribution(u, nodes, u_min, u_max);
-}
 std::tuple<std::vector<t_int>, std::vector<std::tuple<t_real, t_real, t_real>>> uv_all_to_all(
     sopt::mpi::Communicator const &comm, Vector<t_real> const &u, Vector<t_real> const &v,
     Vector<t_real> const &w) {
