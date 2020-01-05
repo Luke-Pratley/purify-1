@@ -506,8 +506,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
                       (w_mean - w.array()).cwiseAbs().maxCoeff() * 0.5);
   }
 
-  const t_real dl = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 512});
-  const t_real dm = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 512});
+  const t_real dl = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 128});
+  const t_real dm = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 128});
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
   const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);
@@ -599,8 +599,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
   const t_real M = L;
-  const t_real dl_temp = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 512});
-  const t_real dm_temp = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 512});
+  const t_real dl_temp = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 128});
+  const t_real dm_temp = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 128});
   const t_real dl = std::min(dl_temp, dm_temp);
   const t_real dm = dl;
   const t_int imsizex = std::floor(L / dl);
@@ -795,8 +795,8 @@ base_plane_degrid_wproj_all_to_all_operator(
   t_real const u_mean = uvw_stacking ? u.array().mean() : 0.;
 
   const t_real M = L;
-  const t_real dl_temp = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 512});
-  const t_real dm_temp = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 512});
+  const t_real dl_temp = std::min({0.25 / ((u.array() - u_mean).cwiseAbs().maxCoeff()), L / 128});
+  const t_real dm_temp = std::min({0.25 / ((v.array() - v_mean).cwiseAbs().maxCoeff()), M / 128});
   const t_real dl = std::max(dl_temp, dm_temp);
   const t_real dm = dl;
   const t_int imsizex = std::floor(L / dl);
