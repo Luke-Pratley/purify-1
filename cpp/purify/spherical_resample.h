@@ -691,6 +691,8 @@ base_plane_degrid_all_to_all_operator(
     const operators::fftw_plan &ft_plan = operators::fftw_plan::measure,
     const bool uvw_stacking = false, const t_real L = 1, const t_real M = 1,
     const t_real coordinate_scaling = 1., const t_real beam_l = 0, const t_real beam_m = 0) {
+  if (image_index.size() != u.size())
+    throw std::runtime_error("Number of stack index is not the same as measurements.");
   bool on_the_fly = true;
   t_real const w_mean = uvw_stacking ? std::get<2>(uvw_stacks.at(comm.rank())) : 0.;
   t_real const v_mean = uvw_stacking ? std::get<1>(uvw_stacks.at(comm.rank())) : 0.;
@@ -698,14 +700,19 @@ base_plane_degrid_all_to_all_operator(
 
   Vector<t_real> u_shifted = Vector<t_real>::Zero(u.size());
   Vector<t_real> v_shifted = Vector<t_real>::Zero(v.size());
-  for (t_int index = 0; index < u.size(); index++) {
-    u_shifted(index) = u(index) - std::get<0>(uvw_stacks.at(image_index.at(index)));
-    v_shifted(index) = v(index) - std::get<1>(uvw_stacks.at(image_index.at(index)));
+  if (uvw_stacking)
+    for (t_int index = 0; index < u.size(); index++) {
+      u_shifted(index) = u(index) - std::get<0>(uvw_stacks.at(image_index.at(index)));
+      v_shifted(index) = v(index) - std::get<1>(uvw_stacks.at(image_index.at(index)));
+    }
+  else {
+    u_shifted = u;
+    v_shifted = v;
   }
-  const t_real dl = comm.all_reduce<t_real>(
-      std::min({0.25 / (u_shifted.cwiseAbs().maxCoeff()), L / 512}), MPI_MIN);
-  const t_real dm = comm.all_reduce<t_real>(
-      std::min({0.25 / (v_shifted.cwiseAbs().maxCoeff()), M / 512}), MPI_MIN);
+  const t_real dl =
+      std::min({0.25 / comm.all_reduce<t_real>(u_shifted.cwiseAbs().maxCoeff(), MPI_MAX), L / 128});
+  const t_real dm =
+      std::min({0.25 / comm.all_reduce<t_real>(v_shifted.cwiseAbs().maxCoeff(), MPI_MAX), M / 128});
   const t_int imsizex = std::floor(L / dl);
   const t_int imsizey = std::floor(M / dm);
   const t_real du = widefield::dl2du(dl, imsizex, oversample_ratio);
@@ -722,6 +729,8 @@ base_plane_degrid_all_to_all_operator(
                       std::asin(beam_m / 2. / 2) * 2. * 180. / constant::pi);
   }
   PURIFY_MEDIUM_LOG("Number of visibilities: {}", u.size());
+  PURIFY_MEDIUM_LOG("Node {} has stack u_mean = {}, v_mean = {}, w_mean = {}", comm.rank(), u_mean,
+                    v_mean, w_mean);
   auto const uvkernels = purify::create_kernels(kernel, Ju, Jv, imsizey, imsizex, oversample_ratio);
   const std::function<t_real(t_real)> &kernelu = std::get<0>(uvkernels);
   const std::function<t_real(t_real)> &kernelv = std::get<1>(uvkernels);
@@ -748,31 +757,25 @@ base_plane_degrid_all_to_all_operator(
   };
 
   PURIFY_LOW_LOG("Constructing Spherical Resampling Operator: P");
-  sopt::OperatorFunction<T> directP, indirectP;
-  std::tie(directP, indirectP) = init_mask_and_resample_operator_2d<T, K>(
+  const auto P = init_mask_and_resample_operator_2d<T, K>(
       number_of_samples, phi_0, theta_0, phi, theta, imsizey, imsizex,
       oversample_ratio_image_domain, dl, dm, kernell, kernelm, Jl, Jm, dde, coordinate_scaling);
-  sopt::OperatorFunction<T> directZFZ, indirectZFZ;
-  std::tie(directZFZ, indirectZFZ) =
+  const auto ZFZ =
       base_padding_and_FFT_2d<T>(ftkernelu, ftkernelv, ftkernell, ftkernelm, imsizey, imsizex,
                                  oversample_ratio, oversample_ratio_image_domain, ft_plan);
 
   PURIFY_LOW_LOG("Constructing Weighting and Gridding Operators: WG");
-  sopt::OperatorFunction<T> directG, indirectG;
-  if (on_the_fly)
-    std::tie(directG, indirectG) = purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
-        comm, comm.size(), image_index, u_shifted / du, v_shifted / dv, weights, imsizey, imsizex,
-        oversample_ratio, kernelu, Ju, Ju * 1e5 / 2);
-  else
-    std::tie(directG, indirectG) = purify::operators::init_gridding_matrix_2d<T>(
-        (u.array() - u_mean) / du, (v.array() - v_mean) / dv, weights, imsizey, imsizex,
-        oversample_ratio, kernelv, kernelu, Ju, Jv);
-
-  const auto allsumall = purify::operators::init_all_sum_all<T>(comm);
-  const auto direct = sopt::chained_operators<T>(directG, directZFZ, directP);
-  const auto indirect = sopt::chained_operators<T>(allsumall, indirectP, indirectZFZ, indirectG);
+  const auto G = (on_the_fly)
+                     ? purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
+                           comm, comm.size(), image_index, u_shifted / du, v_shifted / dv, weights,
+                           imsizey, imsizex, oversample_ratio, kernelu, Ju, Ju * 1e5)
+                     : purify::operators::init_gridding_matrix_2d<T>(
+                           u_shifted / du, v_shifted / dv, weights, imsizey, imsizex,
+                           oversample_ratio, kernelv, kernelu, Ju, Jv);
   PURIFY_LOW_LOG("Finished consturction of Φ.");
-  return std::make_tuple(direct, indirect);
+  return std::make_tuple(
+      sopt::chained_operators<T>(std::get<0>(G), std::get<0>(ZFZ), std::get<0>(P)),
+      sopt::chained_operators<T>(std::get<1>(P), std::get<1>(ZFZ), std::get<1>(G)));
 }
 //! all to all operator that degrids from the upsampled plane to the uv domain (with w-projection
 //! and w-stacking)
@@ -877,9 +880,8 @@ base_plane_degrid_wproj_all_to_all_operator(
           oversample_ratio, ftkerneluv, kerneluv, Ju, Jw, du, dv, absolute_error, relative_error,
           dde_type::wkernel_radial);
 
-  const auto allsumall = purify::operators::init_all_sum_all<T>(comm);
   const auto direct = sopt::chained_operators<T>(directG, directZFZ, directP);
-  const auto indirect = sopt::chained_operators<T>(allsumall, indirectP, indirectZFZ, indirectG);
+  const auto indirect = sopt::chained_operators<T>(indirectP, indirectZFZ, indirectG);
   PURIFY_LOW_LOG("Finished consturction of Φ.");
   return std::make_tuple(direct, indirect);
 }
@@ -979,7 +981,7 @@ std::shared_ptr<sopt::LinearTransform<T>> planar_degrid_operator(
     const t_real beam_l = 0., const t_real beam_m = 0.) {
   if (uv_data.units != utilities::vis_units::lambda)
     throw std::runtime_error("Units for spherical imaging must be in lambda");
-  const auto m_op = base_plane_degrid_operator<T, K>(
+  const auto &m_op = base_plane_degrid_operator<T, K>(
       number_of_samples, phi_0, theta_0, phi, theta, uv_data.u, uv_data.v, uv_data.w,
       uv_data.weights, oversample_ratio, oversample_ratio_image_domain, kernel, Ju, Jv, Jl, Jm,
       ft_plan, uvw_stacking, L, M, 1, beam_l, beam_m);
@@ -1006,15 +1008,21 @@ std::shared_ptr<sopt::LinearTransform<T>> non_planar_degrid_wproj_all_to_all_ope
     const operators::fftw_plan &ft_plan = operators::fftw_plan::measure,
     const bool uvw_stacking = false, const t_real L = 1, const t_real absolute_error = 1e-6,
     const t_real relative_error = 1e-6, const t_real beam_l = 0, const t_real beam_m = 0) {
-  const auto m_op = base_plane_degrid_wproj_all_to_all_operator<T, K>(
+  if (uv_data.units != utilities::vis_units::lambda)
+    throw std::runtime_error("Units for spherical imaging must be in lambda");
+  const auto &m_op = base_plane_degrid_wproj_all_to_all_operator<T, K>(
       comm, image_index, w_stacks, number_of_samples, phi_0, theta_0, phi, theta, uv_data.u,
       uv_data.v, uv_data.w, uv_data.weights, oversample_ratio, oversample_ratio_image_domain,
       kernel, Ju, Jw, Jl, Jm, ft_plan, uvw_stacking, L, absolute_error, relative_error, 1, beam_l,
       beam_m);
   const std::array<t_int, 3> outsize = {0, 1, static_cast<t_int>(uv_data.u.size())};
   const std::array<t_int, 3> insize = {0, 1, number_of_samples};
-  return std::make_shared<sopt::LinearTransform<Vector<t_complex>>>(std::get<0>(m_op), outsize,
-                                                                    std::get<0>(m_op), insize);
+  const auto allsumall = purify::operators::init_all_sum_all<T>(comm);
+  const auto &direct = std::get<0>(m_op);
+  const auto &indirect = sopt::chained_operators<T>(allsumall, std::get<1>(m_op));
+
+  return std::make_shared<sopt::LinearTransform<Vector<t_complex>>>(direct, outsize, indirect,
+                                                                    insize);
 }
 //! The all to all w-stacking w-projection measurement operator
 template <class T, class K>
@@ -1031,16 +1039,19 @@ std::shared_ptr<sopt::LinearTransform<T>> planar_degrid_all_to_all_operator(
     const t_real beam_l = 0, const t_real beam_m = 0) {
   if (uv_data.units != utilities::vis_units::lambda)
     throw std::runtime_error("Units for spherical imaging must be in lambda");
-  const auto m_op = base_plane_degrid_all_to_all_operator<T, K>(
+  const auto &m_op = base_plane_degrid_all_to_all_operator<T, K>(
       comm, image_index, uvw_stacks, number_of_samples, phi_0, theta_0, phi, theta, uv_data.u,
       uv_data.v, uv_data.w, uv_data.weights, oversample_ratio, oversample_ratio_image_domain,
       kernel, Ju, Jv, Jl, Jm, ft_plan, uvw_stacking, L, M, 1, beam_l, beam_m);
 
   const std::array<t_int, 3> outsize = {0, 1, static_cast<t_int>(uv_data.u.size())};
   const std::array<t_int, 3> insize = {0, 1, number_of_samples};
+  const auto allsumall = purify::operators::init_all_sum_all<T>(comm);
+  const auto &direct = std::get<0>(m_op);
+  const auto &indirect = sopt::chained_operators<T>(allsumall, std::get<1>(m_op));
 
-  return std::make_shared<sopt::LinearTransform<Vector<t_complex>>>(std::get<0>(m_op), outsize,
-                                                                    std::get<1>(m_op), insize);
+  return std::make_shared<sopt::LinearTransform<Vector<t_complex>>>(direct, outsize, indirect,
+                                                                    insize);
 }
 #endif
 }  // namespace measurement_operator
