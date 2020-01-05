@@ -518,28 +518,27 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     }
   }
 
-  const AllToAllSparseVector<std::int64_t> distributor(
-      nonZeros_set, ftsizeu_ * ftsizev_,
-      static_cast<std::int64_t>(comm.rank()) * static_cast<std::int64_t>(ftsizeu_ * ftsizev_),
-      comm);
+  const std::shared_ptr<AllToAllSparseVector<std::int64_t>> distributor =
+      std::make_shared<AllToAllSparseVector<std::int64_t>>(
+          nonZeros_set, ftsizeu_ * ftsizev_,
+          static_cast<std::int64_t>(comm.rank()) * static_cast<std::int64_t>(ftsizeu_ * ftsizev_),
+          comm);
 
   std::vector<std::int64_t> nonZeros_vec(nonZeros_set.begin(), nonZeros_set.end());
   std::sort(nonZeros_vec.data(), nonZeros_vec.data() + nonZeros_vec.size());
-  SparseVector<t_int, std::int16_t> mapping(static_cast<std::int64_t>(ftsizev_ * ftsizeu_) *
-                                            static_cast<std::int64_t>(number_of_images));
-  mapping.reserve(nonZeros_vec.size());
+  SparseVector<t_int> mapping(static_cast<std::int64_t>(ftsizev_ * ftsizeu_) *
+                              static_cast<std::int64_t>(number_of_images));
+  PURIFY_LOW_LOG("Non Zero grid locations: {} ", nonZeros_vec.size());
   for (t_int index = 0; index < nonZeros_vec.size(); index++)
     mapping.coeffRef(nonZeros_vec[index]) = index;
-  PURIFY_LOW_LOG("Non Zero grid locations: {} ", mapping.nonZeros());
   const t_int nonZeros_size = nonZeros_vec.size();
-
   const auto degrid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                        ftsizeu_, ftsizev_, distributor, mapping,
                        image_index_ptr](T &output, const T &input) {
     assert(input.size() == ftsizeu_ * ftsizev_);
     assert(image_index_ptr->size() == rows);
     T input_buff;
-    distributor.recv_grid(input, input_buff);
+    distributor->recv_grid(input, input_buff);
 #pragma omp parallel for
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
@@ -569,9 +568,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           result += input_buff(mapping.coeff(index)) * sign;
         }
       }
-      output(m) = result;
+      output(m) = result * (*weights_ptr)(m);
     }
-    output.array() *= (*weights_ptr).array();
   };
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                      ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
@@ -619,16 +617,16 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           const std::int64_t index =
               static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
           const t_complex result = kernelu_val * kernelv_val * vis;
-          output_compressed(static_cast<std::int64_t>(mapping.coeff(index) + shift)) += result;
+          output_compressed(mapping.coeff(index) + shift) += result;
         }
       }
     }
-    for (std::int64_t m = 1; m < max_threads; m++) {
-      const std::int64_t loop_shift = m * nonZeros_size;
-      output_compressed.segment(0, nonZeros_size) +=
-          output_compressed.segment(loop_shift, nonZeros_size);
+    T output_sum = T::Zero(nonZeros_size);
+    for (t_int m = 0; m < max_threads; m++) {
+      const t_int loop_shift = m * nonZeros_size;
+      output_sum += output_compressed.segment(loop_shift, nonZeros_size);
     }
-    distributor.send_grid(output_compressed.segment(0, nonZeros_size).eval(), output);
+    distributor->send_grid(output_sum, output);
   };
   return std::make_tuple(degrid, grid);
 }
