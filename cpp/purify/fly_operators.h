@@ -406,7 +406,6 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       }
       output(m) = result;
     }
-    output.array() *= (*weights_ptr).array();
   };
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                      ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
@@ -568,8 +567,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           result += input_buff(mapping.coeff(index)) * sign;
         }
       }
-      output(m) = result * (*weights_ptr)(m);
+      output(m) = result;
     }
+    output.array() = (output.array() * (*weights_ptr).array()).eval();
   };
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                      ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
@@ -624,7 +624,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     T output_sum = T::Zero(nonZeros_size);
     for (t_int m = 0; m < max_threads; m++) {
       const t_int loop_shift = m * nonZeros_size;
-      output_sum += output_compressed.segment(loop_shift, nonZeros_size);
+      output_sum = (output_sum + output_compressed.segment(loop_shift, nonZeros_size)).eval();
     }
     distributor->send_grid(output_sum, output);
   };
