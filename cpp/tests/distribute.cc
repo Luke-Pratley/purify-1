@@ -99,7 +99,7 @@ TEST_CASE("uv_stacking") {
 
     const auto order = distribute::uv_distribution(u, v, groups);
     const Vector<t_int> result = Vector<t_int>::Map(order.data(), order.size());
-    CHECK(result.size() == groups);
+    CHECK(result.size() == groups * M);
     for (t_int i = 0; i < u_g; i++)
       for (t_int j = 0; j < v_g; j++) {
         const t_int index = i * u_g + j;

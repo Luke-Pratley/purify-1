@@ -230,12 +230,16 @@ std::tuple<std::vector<t_int>, std::vector<std::tuple<t_real, t_real, t_real>>> 
     node_count[node_i]++;
   }
   for (t_int node_i = 0; node_i < nodes; node_i++) {
-    std::get<0>(uvw_stack[node_i]) = comm.all_sum_all<t_real>(std::get<0>(uvw_stack.at(node_i))) /
-                                     comm.all_sum_all<t_real>(node_count.at(node_i));
-    std::get<1>(uvw_stack[node_i]) = comm.all_sum_all<t_real>(std::get<1>(uvw_stack.at(node_i))) /
-                                     comm.all_sum_all<t_real>(node_count.at(node_i));
-    std::get<2>(uvw_stack[node_i]) = comm.all_sum_all<t_real>(std::get<2>(uvw_stack.at(node_i))) /
-                                     comm.all_sum_all<t_real>(node_count.at(node_i));
+    const t_real count = comm.all_sum_all<t_real>(node_count.at(node_i));
+    if (comm.is_root()) PURIFY_DEBUG("Stack {} has {} visibilities", node_i, count);
+    if (count > 0) {
+      std::get<0>(uvw_stack[node_i]) =
+          comm.all_sum_all<t_real>(std::get<0>(uvw_stack.at(node_i))) / count;
+      std::get<1>(uvw_stack[node_i]) =
+          comm.all_sum_all<t_real>(std::get<1>(uvw_stack.at(node_i))) / count;
+      std::get<2>(uvw_stack[node_i]) =
+          comm.all_sum_all<t_real>(std::get<2>(uvw_stack.at(node_i))) / count;
+    }
   }
   return std::make_tuple(node_index, uvw_stack);
 }
