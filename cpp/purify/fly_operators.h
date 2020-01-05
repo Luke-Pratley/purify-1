@@ -497,7 +497,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
   const auto samples = kernels::kernel_samples(
       total_samples, [&](const t_real x) { return kernelu(x * ju_max * 0.5); });
 
-  std::set<std::int64_t> nonZeros_set;
+  std::set<t_int> nonZeros_set;
   for (t_int m = 0; m < rows; ++m) {
     t_complex result = 0;
     const t_real u_val = (*u_ptr)(m);
@@ -508,25 +508,22 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       const t_uint p = utilities::mod(k_v + jv, ftsizev_);
       for (t_int ju = 1; ju < ju_max + 1; ++ju) {
         const t_uint q = utilities::mod(k_u + ju, ftsizeu_);
-        const std::int64_t index =
-            static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) +
-            static_cast<std::int64_t>((*image_index_ptr)[m]) *
-                static_cast<std::int64_t>(ftsizev_ * ftsizeu_);
+        const t_int index = (utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) +
+                            ((*image_index_ptr)[m]) * (ftsizev_ * ftsizeu_);
         nonZeros_set.insert(index);
       }
     }
   }
 
-  const std::shared_ptr<AllToAllSparseVector<std::int64_t>> distributor =
-      std::make_shared<AllToAllSparseVector<std::int64_t>>(
+  const std::shared_ptr<AllToAllSparseVector<t_int>> distributor =
+      std::make_shared<AllToAllSparseVector<t_int>>(
           nonZeros_set, ftsizeu_ * ftsizev_,
-          static_cast<std::int64_t>(comm.rank()) * static_cast<std::int64_t>(ftsizeu_ * ftsizev_),
-          comm);
+          static_cast<t_int>(comm.rank()) * static_cast<t_int>(ftsizeu_ * ftsizev_), comm);
 
-  std::vector<std::int64_t> nonZeros_vec(nonZeros_set.begin(), nonZeros_set.end());
+  std::vector<t_int> nonZeros_vec(nonZeros_set.begin(), nonZeros_set.end());
   std::sort(nonZeros_vec.data(), nonZeros_vec.data() + nonZeros_vec.size());
-  SparseVector<t_int> mapping(static_cast<std::int64_t>(ftsizev_ * ftsizeu_) *
-                              static_cast<std::int64_t>(number_of_images));
+  SparseVector<t_int> mapping(static_cast<t_int>(ftsizev_ * ftsizeu_) *
+                              static_cast<t_int>(number_of_images));
   PURIFY_LOW_LOG("Non Zero grid locations: {} ", nonZeros_vec.size());
   for (t_int index = 0; index < nonZeros_vec.size(); index++)
     mapping.coeffRef(nonZeros_vec[index]) = index;
@@ -545,8 +542,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       const t_real v_val = (*v_ptr)(m);
       const t_real k_u = std::floor(u_val - ju_max * 0.5);
       const t_real k_v = std::floor(v_val - jv_max * 0.5);
-      const std::int64_t grid_shift = static_cast<std::int64_t>((*image_index_ptr)[m]) *
-                                      static_cast<std::int64_t>(ftsizev_ * ftsizeu_);
+      const t_int grid_shift =
+          static_cast<t_int>((*image_index_ptr)[m]) * static_cast<t_int>(ftsizev_ * ftsizeu_);
       for (t_int jv = 1; jv < jv_max + 1; ++jv) {
         const t_uint p = utilities::mod(k_v + jv, ftsizev_);
         const t_real c_0 = static_cast<t_int>(
@@ -561,8 +558,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           assert(i_0 >= 0);
           assert(i_0 < total_samples);
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
-          const std::int64_t index =
-              static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
+          const t_int index = (utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
           const t_real sign = kernelu_val * kernelv_val;
           result += input_buff(mapping.coeff(index)) * sign;
         }
@@ -589,17 +585,16 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
 #ifdef PURIFY_OPENMP
-      const std::int64_t shift = omp_get_thread_num() * nonZeros_size;
+      const t_int shift = omp_get_thread_num() * nonZeros_size;
 #else
-      const std::int64_t shift = 0;
+      const t_int shift = 0;
 #endif
       const t_real u_val = (*u_ptr)(m);
       const t_real v_val = (*v_ptr)(m);
       const t_real k_u = std::floor(u_val - ju_max * 0.5);
       const t_real k_v = std::floor(v_val - jv_max * 0.5);
       const t_complex vis = input(m) * std::conj((*weights_ptr)(m));
-      const std::int64_t grid_shift = static_cast<std::int64_t>((*image_index_ptr)[m]) *
-                                      static_cast<std::int64_t>(ftsizev_ * ftsizeu_);
+      const t_int grid_shift = ((*image_index_ptr)[m]) * (ftsizev_ * ftsizeu_);
       for (t_int jv = 1; jv < jv_max + 1; ++jv) {
         const t_uint p = utilities::mod(k_v + jv, ftsizev_);
         const t_real c_0 = static_cast<t_int>(
@@ -614,8 +609,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           assert(i_0 >= 0);
           assert(i_0 < total_samples);
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
-          const std::int64_t index =
-              static_cast<std::int64_t>(utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
+          const t_int index = (utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
           const t_complex result = kernelu_val * kernelv_val * vis;
           output_compressed(mapping.coeff(index) + shift) += result;
         }
