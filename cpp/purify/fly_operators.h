@@ -574,9 +574,8 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           result += input_buff(index) * sign;
         }
       }
-      output(m) = result;
+      output(m) = result * (*weights_ptr)(m);
     }
-    output.array() = (output.array() * (*weights_ptr).array()).eval();
   };
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                      ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
@@ -590,7 +589,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
 #else
     t_int const max_threads = 1;
 #endif
-    std::vector<T> output_compressed = std::vector<T>(max_threads, T::Zero(nonZeros_size).eval());
+    T output_compressed = T::Zero(nonZeros_size * max_threads).eval();
     assert(output.size() == N);
 #ifdef PURIFY_OPENMP
 #pragma omp parallel for
@@ -624,16 +623,15 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
           const t_int index =
               mapping.coeff((utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift) + shift;
-          (output_compressed.at(omp_get_thread_num()))(
-              mapping.coeff((utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift)) +=
-              kernelu_val * kernelv_val * vis;
+          const t_complex result = kernelu_val * kernelv_val * vis;
+          output_compressed(index) += result;
         }
       }
     }
     T output_sum = T::Zero(nonZeros_size);
     for (t_int m = 0; m < max_threads; m++) {
       const t_int loop_shift = m * nonZeros_size;
-      output_sum = (output_sum + output_compressed.at(m)).eval();
+      output_sum = (output_sum + output_compressed.segment(loop_shift, nonZeros_size)).eval();
     }
     distributor.send_grid(output_sum, output);
   };
