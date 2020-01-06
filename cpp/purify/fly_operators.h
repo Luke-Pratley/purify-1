@@ -516,10 +516,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     }
   }
 
-  const std::shared_ptr<AllToAllSparseVector<t_int>> distributor =
-      std::make_shared<AllToAllSparseVector<t_int>>(
-          nonZeros_set, ftsizeu_ * ftsizev_,
-          static_cast<t_int>(comm.rank()) * static_cast<t_int>(ftsizeu_ * ftsizev_), comm);
+  const AllToAllSparseVector<t_int> distributor(
+      nonZeros_set, ftsizeu_ * ftsizev_,
+      static_cast<t_int>(comm.rank()) * static_cast<t_int>(ftsizeu_ * ftsizev_), comm);
 
   std::vector<t_int> nonZeros_vec(nonZeros_set.begin(), nonZeros_set.end());
   std::sort(nonZeros_vec.data(), nonZeros_vec.data() + nonZeros_vec.size());
@@ -535,7 +534,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     assert(input.size() == ftsizeu_ * ftsizev_);
     assert(image_index_ptr->size() == rows);
     T input_buff;
-    distributor->recv_grid(input, input_buff);
+    distributor.recv_grid(input, input_buff);
 #pragma omp parallel for
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
@@ -559,9 +558,10 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           assert(i_0 >= 0);
           assert(i_0 < total_samples);
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
-          const t_int index = (utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
+          const t_int index =
+              mapping.coeff((utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift);
           const t_real sign = kernelu_val * kernelv_val;
-          result += input_buff(mapping.coeff(index)) * sign;
+          result += input_buff(index) * sign;
         }
       }
       output(m) = result;
@@ -610,9 +610,10 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           assert(i_0 >= 0);
           assert(i_0 < total_samples);
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
-          const t_int index = (utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift;
+          const t_int index =
+              mapping.coeff((utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift) + shift;
           const t_complex result = kernelu_val * kernelv_val * vis;
-          output_compressed(mapping.coeff(index) + shift) += result;
+          output_compressed(index) += result;
         }
       }
     }
@@ -621,7 +622,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       const t_int loop_shift = m * nonZeros_size;
       output_sum = (output_sum + output_compressed.segment(loop_shift, nonZeros_size)).eval();
     }
-    distributor->send_grid(output_sum, output);
+    distributor.send_grid(output_sum, output);
   };
   return std::make_tuple(degrid, grid);
 }

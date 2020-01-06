@@ -216,7 +216,7 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
           const t_real i_0 = static_cast<t_int>(
               std::floor(2 * std::abs(m_val - p) * (total_samples - 1) / jm_max));
           if ((cols > index) and (index >= 0))
-            output(k) += samples[i_0] * kernell_val * input(index);
+            output(k) = samples[i_0] * kernell_val * input(index);
         }
       }
     }
