@@ -117,6 +117,7 @@ class AllToAllSparseVector {
   template <class T0, class T1>
   void send_grid(Eigen::MatrixBase<T0> const &input, Eigen::MatrixBase<T1> const &output) const {
     assert(input.cols() == 1);
+    output.const_cast_derived() = T0::Zero(mapping.cols());
     auto const buffer = comm.all_to_allv<typename T0::Scalar>(input, recv_sizes, send_sizes);
     mapping.adjoint(buffer, output.derived());
   }

@@ -406,6 +406,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       }
       output(m) = result;
     }
+    output.array() = (output.array() * (*weights_ptr).array()).eval();
   };
   const auto grid = [rows, ju_max, jv_max, I, u_ptr, v_ptr, weights_ptr, samples, total_samples,
                      ftsizeu_, ftsizev_, mapping, nonZeros_size, distributor,
