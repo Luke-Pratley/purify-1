@@ -222,7 +222,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
                        total_samples, ftsizeu_, ftsizev_](T &output, const T &input) {
     output = T::Zero(u_ptr->size());
     assert(input.size() == ftsizeu_ * ftsizev_);
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
       const t_real u_val = (*u_ptr)(m);
@@ -266,7 +268,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
 #endif
     T output_compressed = T::Zero(nonZeros_size * max_threads);
     assert(output.size() == N);
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
 #ifdef PURIFY_OPENMP
@@ -378,7 +382,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
       distributor->scatter(input_buff);
     }
     assert(input_buff.size() == mapping.nonZeros());
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
       const t_real u_val = (*u_ptr)(m);
@@ -418,7 +424,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     t_int const max_threads = 1;
 #endif
     T output_compressed = T::Zero(nonZeros_size * max_threads);
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
 #ifdef PURIFY_OPENMP
@@ -535,7 +543,9 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
     assert(image_index_ptr->size() == rows);
     T input_buff;
     distributor.recv_grid(input, input_buff);
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
       const t_real u_val = (*u_ptr)(m);
@@ -580,9 +590,11 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
 #else
     t_int const max_threads = 1;
 #endif
-    T output_compressed = T::Zero(nonZeros_size * max_threads);
+    T output_compressed = T::Zero(nonZeros_size * max_threads).eval();
     assert(output.size() == N);
+#ifdef PURIFY_OPENMP
 #pragma omp parallel for
+#endif
     for (t_int m = 0; m < rows; ++m) {
       t_complex result = 0;
 #ifdef PURIFY_OPENMP
