@@ -590,7 +590,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
 #else
     t_int const max_threads = 1;
 #endif
-    T output_compressed = T::Zero(nonZeros_size * max_threads).eval();
+    std::vector<T> output_compressed = std::vector<T>(max_threads, T::Zero(nonZeros_size).eval());
     assert(output.size() == N);
 #ifdef PURIFY_OPENMP
 #pragma omp parallel for
@@ -624,15 +624,16 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> init_on_the_fly
           const t_real kernelu_val = samples[i_0] * (1. - (2 * (q % 2)));
           const t_int index =
               mapping.coeff((utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift) + shift;
-          const t_complex result = kernelu_val * kernelv_val * vis;
-          output_compressed(index) += result;
+          (output_compressed.at(omp_get_thread_num()))(
+              mapping.coeff((utilities::sub2ind(p, q, ftsizev_, ftsizeu_)) + grid_shift)) +=
+              kernelu_val * kernelv_val * vis;
         }
       }
     }
     T output_sum = T::Zero(nonZeros_size);
     for (t_int m = 0; m < max_threads; m++) {
       const t_int loop_shift = m * nonZeros_size;
-      output_sum = (output_sum + output_compressed.segment(loop_shift, nonZeros_size)).eval();
+      output_sum = (output_sum + output_compressed.at(m)).eval();
     }
     distributor.send_grid(output_sum, output);
   };
