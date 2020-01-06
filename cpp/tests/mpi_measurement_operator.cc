@@ -296,6 +296,63 @@ TEST_CASE("Serial vs All to All Fourier Grid Operator weighted") {
   }
 }
 
+TEST_CASE("Standard vs All to All") {
+  // sopt::logging::set_level("debug");
+  // purify::logging::set_level("debug");
+  auto const world = sopt::mpi::Communicator::World();
+
+  auto const N = 1000;
+  auto uv_serial = utilities::random_sample_density(N, 0, constant::pi / 3, 100);
+  uv_serial.u = world.broadcast(uv_serial.u);
+  uv_serial.v = world.broadcast(uv_serial.v);
+  uv_serial.w = world.broadcast(uv_serial.w);
+  uv_serial.units = utilities::vis_units::radians;
+  uv_serial.vis = world.broadcast<Vector<t_complex>>(Vector<t_complex>::Random(uv_serial.u.size()));
+  uv_serial.weights =
+      world.broadcast<Vector<t_complex>>(Vector<t_complex>::Random(uv_serial.u.size()));
+
+  utilities::vis_params uv_mpi;
+  if (world.is_root()) {
+    auto const order =
+        distribute::distribute_measurements(uv_serial, world, distribute::plan::radial);
+    uv_mpi = utilities::regroup_and_scatter(uv_serial, order, world);
+  } else
+    uv_mpi = utilities::scatter_visibilities(world);
+
+  auto const over_sample = 2;
+  auto const J = 4;
+  auto const kernel = kernels::kernel::kb;
+  auto const width = 128;
+  auto const height = 128;
+  auto const cell_size = 1;
+  // First create an instance of an engine.
+  const std::vector<t_int> image_index = std::vector<t_int>(uv_mpi.size(), 0);
+  const std::vector<t_real> w_stacks = std::vector<t_real>(world.size(), 0);
+  const Vector<t_complex> power_init =
+      world.broadcast(Vector<t_complex>::Random(height * width).eval());
+
+  const auto uv_stacks = utilities::regroup_and_all_to_all(uv_mpi, image_index, world);
+  // all to all operator
+  const auto op = std::get<2>(sopt::algorithm::normalise_operator<Vector<t_complex>>(
+      purify::measurementoperator::init_degrid_operator_2d_all_to_all<Vector<t_complex>>(
+          world, image_index, w_stacks, uv_mpi, height, width, cell_size, cell_size, over_sample,
+          kernel, J, J, true),
+      100, 1e-4, power_init));
+  if (world.size() == 1) {
+    REQUIRE(uv_serial.u.isApprox(uv_mpi.u));
+    CHECK(uv_serial.v.isApprox(uv_mpi.v));
+    CHECK(uv_serial.weights.isApprox(uv_mpi.weights));
+  }
+  SECTION("Degridding") {
+    Vector<t_complex> const image =
+        world.broadcast<Vector<t_complex>>(Vector<t_complex>::Random(width * height));
+    auto uv_degrid = uv_mpi;
+    uv_degrid.vis = *op * image;
+  }
+  SECTION("Gridding") {
+    Vector<t_complex> const gridded = op->adjoint() * uv_mpi.vis;
+  }
+}
 TEST_CASE("Standard vs All to All stacking") {
   // sopt::logging::set_level("debug");
   // purify::logging::set_level("debug");

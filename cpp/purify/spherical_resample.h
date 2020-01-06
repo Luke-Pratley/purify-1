@@ -196,6 +196,7 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
     for (t_int k = 0; k < rows; ++k) {
       assert(k < rows);
       assert(k >= 0);
+      t_complex result = 0;
       const t_real l_val = (*l_ptr)(k);
       const t_real m_val = (*m_ptr)(k);
       const t_complex dde_val = std::conj((*dde_ptr)(k));
@@ -215,10 +216,10 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
                                                  imsizey_upsampled, imsizex_upsampled);
           const t_real i_0 = static_cast<t_int>(
               std::floor(2 * std::abs(m_val - p) * (total_samples - 1) / jm_max));
-          if ((cols > index) and (index >= 0))
-            output(k) = samples[i_0] * kernell_val * input(index);
+          if ((cols > index) and (index >= 0)) result += samples[i_0] * kernell_val * input(index);
         }
       }
+      output(k) = result;
     }
   };
 
