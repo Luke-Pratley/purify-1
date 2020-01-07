@@ -692,7 +692,7 @@ base_plane_degrid_all_to_all_operator(
     const t_real coordinate_scaling = 1., const t_real beam_l = 0, const t_real beam_m = 0) {
   if (image_index.size() != u.size())
     throw std::runtime_error("Number of stack index is not the same as measurements.");
-  bool on_the_fly = true;
+  bool on_the_fly = false;
   t_real const w_mean = uvw_stacking ? std::get<2>(uvw_stacks.at(comm.rank())) : 0.;
   t_real const v_mean = uvw_stacking ? std::get<1>(uvw_stacks.at(comm.rank())) : 0.;
   t_real const u_mean = uvw_stacking ? std::get<0>(uvw_stacks.at(comm.rank())) : 0.;
@@ -764,13 +764,18 @@ base_plane_degrid_all_to_all_operator(
                                  oversample_ratio, oversample_ratio_image_domain, ft_plan);
 
   PURIFY_LOW_LOG("Constructing Weighting and Gridding Operators: WG");
-  const auto G = (on_the_fly)
-                     ? purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
-                           comm, comm.size(), image_index, u_shifted / du, v_shifted / dv, weights,
-                           imsizey, imsizex, oversample_ratio, kernelu, Ju, Ju * 1e5)
-                     : purify::operators::init_gridding_matrix_2d<T>(
-                           u_shifted / du, v_shifted / dv, weights, imsizey, imsizex,
-                           oversample_ratio, kernelv, kernelu, Ju, Jv);
+  const t_int local_grid_size =
+      std::floor(imsizex * oversample_ratio) * std::floor(imsizey * oversample_ratio);
+  const auto G =
+      (on_the_fly)
+          ? purify::operators::init_on_the_fly_gridding_matrix_2d<T>(
+                comm, comm.size(), image_index, u_shifted / du, v_shifted / dv, weights, imsizey,
+                imsizex, oversample_ratio, kernelu, Ju, Ju * 1e5)
+          : purify::operators::init_gridding_matrix_2d_all_to_all<T, std::int64_t>(
+                comm, static_cast<std::int64_t>(local_grid_size),
+                static_cast<std::int64_t>(comm.rank()) * static_cast<std::int64_t>(local_grid_size),
+                comm.size(), image_index, u_shifted / du, v_shifted / dv, weights, imsizey, imsizex,
+                oversample_ratio, kernelv, kernelu, Ju, Jv);
   PURIFY_LOW_LOG("Finished consturction of Φ.");
   return std::make_tuple(
       sopt::chained_operators<T>(std::get<0>(G), std::get<0>(ZFZ), std::get<0>(P)),
