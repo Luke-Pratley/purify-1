@@ -253,9 +253,7 @@ init_on_the_fly_resample_operator_2d(const Vector<t_real> &l_compressed,
               std::floor(2 * std::abs(m_val - p) * (total_samples - 1) / jm_max));
           if ((cols > index) and (index >= 0)) {
 #pragma omp critical(resample_fly)
-            {
-              output(index) += samples[i_0] * kernell_val * input(k);
-            }
+            output(index) += samples[i_0] * kernell_val * input(k);
           }
         }
       }
