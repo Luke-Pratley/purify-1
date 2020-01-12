@@ -380,15 +380,15 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   PURIFY_MEDIUM_LOG("Oversampling Factor of Image grid: {}", oversample_ratio_image_domain);
 
   const Image<t_complex> S_l = purify::details::init_correction2d(
-      oversample_ratio, imsizey_upsampled, imsizex_upsampled,
-      [oversample_ratio_image_domain, &ftkernelu](t_real x) {
-        return ftkernelu(x / oversample_ratio_image_domain);
-      },
-      [oversample_ratio_image_domain, &ftkernelv](t_real x) {
-        return ftkernelv(x / oversample_ratio_image_domain);
-      },
-      0., 0., 0.);
-  //                               std::sqrt(static_cast<t_real>(ftsizeu * ftsizev));
+                                   oversample_ratio, imsizey_upsampled, imsizex_upsampled,
+                                   [oversample_ratio_image_domain, &ftkernelu](t_real x) {
+                                     return ftkernelu(x / oversample_ratio_image_domain);
+                                   },
+                                   [oversample_ratio_image_domain, &ftkernelv](t_real x) {
+                                     return ftkernelv(x / oversample_ratio_image_domain);
+                                   },
+                                   0., 0., 0.) *
+                               std::sqrt(static_cast<t_real>(ftsizeu * ftsizev));
 
   std::tie(directZ_image_domain, indirectZ_image_domain) =
       purify::operators::init_zero_padding_2d<T>(S_l, oversample_ratio);
@@ -445,9 +445,10 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_padding_an
   PURIFY_MEDIUM_LOG("Oversampling Factor of FT grid: {}", oversample_ratio);
   PURIFY_MEDIUM_LOG("Oversampling Factor of Image grid: {}", oversample_ratio_image_domain);
 
-  const Image<t_complex> S_l = purify::details::init_correction_radial_2d(
-      oversample_ratio, imsizey_upsampled, imsizex_upsampled, ftkerneluv, 0., 0., 0.);
-  // std::sqrt(static_cast<t_real>(ftsizeu * ftsizev));
+  const Image<t_complex> S_l =
+      purify::details::init_correction_radial_2d(oversample_ratio, imsizey_upsampled,
+                                                 imsizex_upsampled, ftkerneluv, 0., 0., 0.) *
+      std::sqrt(static_cast<t_real>(ftsizeu * ftsizev));
 
   std::tie(directZ_image_domain, indirectZ_image_domain) =
       purify::operators::init_zero_padding_2d<T>(S_l, oversample_ratio);
@@ -549,8 +550,7 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
                     (u_mean * l + v_mean * m + w_mean * (std::sqrt(1. - l * l - m * m) - 1.))) /
            std::sqrt(1. - l * l - m * m) * (((l * l + m * m) < 1.) ? 1. : 0.) *
            std::pow(boost::math::sinc_pi(beam_l * l * constant::pi), 2) *
-           std::pow(boost::math::sinc_pi(beam_m * m * constant::pi), 2) *
-           std::sqrt(imsizex * imsizey) * oversample_ratio * oversample_ratio_image_domain;
+           std::pow(boost::math::sinc_pi(beam_m * m * constant::pi), 2);
   };
 
   PURIFY_LOW_LOG("Constructing Spherical Resampling Operator: P");
@@ -646,7 +646,6 @@ std::tuple<sopt::OperatorFunction<T>, sopt::OperatorFunction<T>> base_plane_degr
     return std::exp(-2 * constant::pi * I *
                     (u_mean * l + v_mean * m + w_mean * (std::sqrt(1. - l * l - m * m) - 1.))) /
            std::sqrt(1. - l * l - m * m) * (((l * l + m * m) < 1.) ? 1. : 0.) *
-           std::sqrt(imsizex * imsizey) * oversample_ratio * oversample_ratio_image_domain *
            std::pow(boost::math::sinc_pi(beam_l * l * constant::pi), 2) *
            std::pow(boost::math::sinc_pi(beam_m * m * constant::pi), 2);
   };
@@ -751,8 +750,7 @@ base_plane_degrid_all_to_all_operator(
                     (u_mean * l + v_mean * m + w_mean * (std::sqrt(1. - l * l - m * m) - 1.))) /
            std::sqrt(1. - l * l - m * m) * (((l * l + m * m) < 1.) ? 1. : 0.) *
            std::pow(boost::math::sinc_pi(beam_l * l * constant::pi), 2) *
-           std::pow(boost::math::sinc_pi(beam_m * m * constant::pi), 2) *
-           std::sqrt(imsizex * imsizey) * oversample_ratio * oversample_ratio_image_domain;
+           std::pow(boost::math::sinc_pi(beam_m * m * constant::pi), 2);
   };
 
   PURIFY_LOW_LOG("Constructing Spherical Resampling Operator: P");
